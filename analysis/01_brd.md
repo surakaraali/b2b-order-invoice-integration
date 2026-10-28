@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Project** | B2B Order, Stock and Invoice Integration |
-| **Document** | Business Requirements Document (BRD), version 1.0 |
+| **Document** | Business Requirements Document (BRD), version 1.1 |
 | **Status** | Approved |
 | **Author** | Sura Karaali, Business Analyst |
 | **Date** | 29 October 2026 |
@@ -36,7 +36,7 @@ Three flows are in scope: **order**, **stock inquiry** and **invoice**. Returns 
 | Head office | Istanbul |
 | Warehouses | Central warehouse in Istanbul, regional warehouses in Ankara and İzmir |
 | Dealers | About 120 active dealers |
-| Order volume | About 90 orders and 350 order lines per working day |
+| Order volume | About 45 orders and 350 order lines per working day (about 8 lines per order) |
 | Sales support | 3 people, responsible for order entry and dealer questions |
 | Sales representatives | 8 regional representatives, each owning a dealer portfolio |
 | ERP | Existing on-premise ERP, the system of record for products, prices, stock, credit, orders and invoices. Treated as a black box that exposes this data to the integration layer. |
@@ -63,7 +63,7 @@ The current process is described in detail in [02 Process analysis](02_process_a
 
 | Area | Today | Impact |
 |---|---|---|
-| Order entry | Orders arrive by e-mail or Excel. Sales support keys them into the ERP, about 25 minutes per order. | About 2 of the 3 sales support staff are busy with order entry. About 4% of orders need a correction after entry (wrong SKU, quantity or address). |
+| Order entry | Orders arrive by e-mail or Excel. Sales support reads, clarifies and keys them into the ERP, about 25 minutes of handling per order. | About 2 of the 3 sales support staff are busy with order entry. About 4% of orders need a correction after entry (wrong SKU, quantity or address). |
 | Order acknowledgement | The dealer learns whether the order was accepted by e-mail, usually the next day. | Dealers call to ask about order status. Rejections due to credit limit are discovered late. |
 | Stock inquiry | About 60 stock questions a day by phone or e-mail. | Sales support time. Dealers order items that are not available, so about 7% of order lines end up on backorder. |
 | Invoice delivery | Invoices are sent as PDF by e-mail. The dealer keys them into its own system. | Average 1.5 working days from shipment to the dealer booking the invoice. About 45 reconciliation mismatches per month (wrong amounts, missing invoices, duplicates). |

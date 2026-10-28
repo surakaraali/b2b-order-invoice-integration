@@ -27,7 +27,7 @@ Returns and cancellations are out of scope for this version.
 | Deliverable | Where | Status |
 |---|---|---|
 | Business requirements document (BRD) | `analysis/01_brd.md` | Done |
-| As-is / to-be process analysis with BPMN | `analysis/02_process_as_is_to_be.md`, `diagrams/bpmn/` | Planned |
+| As-is / to-be process analysis with BPMN | `analysis/02_process_as_is_to_be.md`, `diagrams/bpmn/` | Done |
 | Use cases and UML (use case, sequence, state) | `analysis/03_use_cases.md`, `diagrams/uml/` | Planned |
 | Field mapping: dealer ERP ↔ distributor API ↔ UBL-TR | `analysis/04_field_mapping.md` | Planned |
 | Error, retry and idempotency scenarios | `analysis/05_error_scenarios.md` | Planned |

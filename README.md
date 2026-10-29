@@ -33,7 +33,7 @@ Returns and cancellations are out of scope for this version.
 | Error, retry and idempotency scenarios | `analysis/05_error_scenarios.md` | Done |
 | Non-functional requirements (SLA, security, performance) | `analysis/06_nfr.md` | Done |
 | OpenAPI specification for the dealer API (orders, stock, products, invoices, webhooks) | `api/openapi/vektor-dealer-api.v1.yaml` | Done |
-| e-Invoice SOAP contract and sample UBL-TR messages | `api/soap/` | Planned |
+| e-Invoice SOAP contract (WSDL) and sample UBL-TR messages | `api/soap/` | Done |
 | Postman collection with tests | `api/postman/` | Planned |
 | Reconciliation SQL on synthetic integration data (DuckDB) | `sql/`, `scripts/` | Planned |
 | Product backlog, sprint plan, JIRA and Confluence screenshots | `agile/` | Planned |

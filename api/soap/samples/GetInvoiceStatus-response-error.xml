@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:ein="https://ws.kopru-ebelge.example/einvoice/v1">
+  <soapenv:Body>
+    <ein:GetInvoiceStatusResponse>
+      <ein:ettn>8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b</ein:ettn>
+      <ein:status>ERROR</ein:status>
+      <ein:stateCode>1230</ein:stateCode>
+      <ein:stateDescription>Hedef gönderim başarısız</ein:stateDescription>
+      <ein:envelopeId>3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f</ein:envelopeId>
+      <ein:updatedAt>2027-03-06T15:52:40+03:00</ein:updatedAt>
+      <ein:errorCode>1230</ein:errorCode>
+      <ein:errorDescription>Alıcı posta kutusu (urn:mail:defaultpk@marmarateknoloji.example) yanıt vermedi; entegratör yeniden deneyecek. 3 denemeden sonra ERROR.</ein:errorDescription>
+    </ein:GetInvoiceStatusResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions name="EInvoiceService"
+    targetNamespace="https://ws.kopru-ebelge.example/einvoice/v1"
+    xmlns:tns="https://ws.kopru-ebelge.example/einvoice/v1"
+    xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <wsdl:documentation>
+    Köprü e-Belge e-Invoice service, version 1. Fictional private integrator (özel entegratör) contract written for the
+    B2B order, stock and invoice integration analysis case. SOAP 1.1, document/literal wrapped. Authentication with
+    WS-Security UsernameToken (PasswordText over TLS). Operations: CheckUser, SendInvoice, GetInvoiceStatus.
+    Field names and codes are representative of Turkish private integrator services; they are not those of a real provider.
+  </wsdl:documentation>
+
+  <wsdl:types>
+    <xs:schema targetNamespace="https://ws.kopru-ebelge.example/einvoice/v1" elementFormDefault="qualified">
+
+      <!-- ===== simple types ===== -->
+      <xs:simpleType name="VknType">
+        <xs:restriction base="xs:string">
+          <xs:pattern value="[0-9]{10}"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="EttnType">
+        <xs:restriction base="xs:string">
+          <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="InvoiceNoType">
+        <xs:restriction base="xs:string">
+          <xs:pattern value="[A-Z]{3}[0-9]{4}[0-9]{9}"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="AliasType">
+        <xs:restriction base="xs:string">
+          <xs:maxLength value="200"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="AliasKindType">
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="PK"/>
+          <xs:enumeration value="GB"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="ProfileType">
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="TEMELFATURA"/>
+          <xs:enumeration value="TICARIFATURA"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="InvoiceStatusType">
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="QUEUED"/>
+          <xs:enumeration value="SENT"/>
+          <xs:enumeration value="DELIVERED"/>
+          <xs:enumeration value="ERROR"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="HashAlgorithmType">
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="SHA-256"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="Sha256HexType">
+        <xs:restriction base="xs:string">
+          <xs:pattern value="[0-9a-f]{64}"/>
+        </xs:restriction>
+      </xs:simpleType>
+
+      <!-- ===== CheckUser ===== -->
+      <xs:element name="CheckUserRequest">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="vkn" type="tns:VknType"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:complexType name="UserAlias">
+        <xs:sequence>
+          <xs:element name="alias" type="tns:AliasType"/>
+          <xs:element name="kind" type="tns:AliasKindType"/>
+          <xs:element name="registeredAt" type="xs:date"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:element name="CheckUserResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="vkn" type="tns:VknType"/>
+            <xs:element name="registered" type="xs:boolean"/>
+            <xs:element name="title" type="xs:string" minOccurs="0"/>
+            <xs:element name="firstRegisteredAt" type="xs:date" minOccurs="0"/>
+            <xs:element name="aliases" minOccurs="0">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="alias" type="tns:UserAlias" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+
+      <!-- ===== SendInvoice ===== -->
+      <xs:complexType name="InvoiceDocument">
+        <xs:sequence>
+          <xs:element name="ettn" type="tns:EttnType"/>
+          <xs:element name="invoiceNo" type="tns:InvoiceNoType"/>
+          <xs:element name="profile" type="tns:ProfileType"/>
+          <xs:element name="senderAlias" type="tns:AliasType"/>
+          <xs:element name="receiverVkn" type="tns:VknType"/>
+          <xs:element name="receiverAlias" type="tns:AliasType"/>
+          <xs:element name="contentType" type="xs:string" fixed="application/zip"/>
+          <xs:element name="hashAlgorithm" type="tns:HashAlgorithmType"/>
+          <xs:element name="hash" type="tns:Sha256HexType"/>
+          <xs:element name="content" type="xs:base64Binary"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:element name="SendInvoiceRequest">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="document" type="tns:InvoiceDocument"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="SendInvoiceResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="receiptId" type="xs:string"/>
+            <xs:element name="ettn" type="tns:EttnType"/>
+            <xs:element name="receivedAt" type="xs:dateTime"/>
+            <xs:element name="status" type="tns:InvoiceStatusType"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+
+      <!-- ===== GetInvoiceStatus ===== -->
+      <xs:element name="GetInvoiceStatusRequest">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="ettn" type="tns:EttnType"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="GetInvoiceStatusResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="ettn" type="tns:EttnType"/>
+            <xs:element name="status" type="tns:InvoiceStatusType"/>
+            <xs:element name="stateCode" type="xs:int" minOccurs="0"/>
+            <xs:element name="stateDescription" type="xs:string" minOccurs="0"/>
+            <xs:element name="envelopeId" type="tns:EttnType" minOccurs="0"/>
+            <xs:element name="updatedAt" type="xs:dateTime"/>
+            <xs:element name="errorCode" type="xs:int" minOccurs="0"/>
+            <xs:element name="errorDescription" type="xs:string" minOccurs="0"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+
+      <!-- ===== fault detail ===== -->
+      <xs:element name="ServiceFault">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="code" type="xs:int"/>
+            <xs:element name="message" type="xs:string"/>
+            <xs:element name="requestId" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:schema>
+  </wsdl:types>
+
+  <wsdl:message name="CheckUserInput">
+    <wsdl:part name="parameters" element="tns:CheckUserRequest"/>
+  </wsdl:message>
+  <wsdl:message name="CheckUserOutput">
+    <wsdl:part name="parameters" element="tns:CheckUserResponse"/>
+  </wsdl:message>
+  <wsdl:message name="SendInvoiceInput">
+    <wsdl:part name="parameters" element="tns:SendInvoiceRequest"/>
+  </wsdl:message>
+  <wsdl:message name="SendInvoiceOutput">
+    <wsdl:part name="parameters" element="tns:SendInvoiceResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetInvoiceStatusInput">
+    <wsdl:part name="parameters" element="tns:GetInvoiceStatusRequest"/>
+  </wsdl:message>
+  <wsdl:message name="GetInvoiceStatusOutput">
+    <wsdl:part name="parameters" element="tns:GetInvoiceStatusResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ServiceFaultMessage">
+    <wsdl:part name="detail" element="tns:ServiceFault"/>
+  </wsdl:message>
+
+  <wsdl:portType name="EInvoicePortType">
+    <wsdl:operation name="CheckUser">
+      <wsdl:documentation>Is the tax number a registered e-Invoice user, and which inbox aliases does it have? Used before SendInvoice (RULE-14).</wsdl:documentation>
+      <wsdl:input message="tns:CheckUserInput"/>
+      <wsdl:output message="tns:CheckUserOutput"/>
+      <wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/>
+    </wsdl:operation>
+    <wsdl:operation name="SendInvoice">
+      <wsdl:documentation>Accepts one UBL-TR invoice as a zipped, base64-encoded document with its SHA-256 hash. An ETTN is accepted only once: a repeat returns ServiceFault 2005 with the original receiptId in the message, which the sender treats as accepted.</wsdl:documentation>
+      <wsdl:input message="tns:SendInvoiceInput"/>
+      <wsdl:output message="tns:SendInvoiceOutput"/>
+      <wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetInvoiceStatus">
+      <wsdl:documentation>Current delivery status of an invoice by ETTN, with the GİB envelope state code when available.</wsdl:documentation>
+      <wsdl:input message="tns:GetInvoiceStatusInput"/>
+      <wsdl:output message="tns:GetInvoiceStatusOutput"/>
+      <wsdl:fault name="ServiceFault" message="tns:ServiceFaultMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+
+  <wsdl:binding name="EInvoiceSoapBinding" type="tns:EInvoicePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="CheckUser">
+      <soap:operation soapAction="https://ws.kopru-ebelge.example/einvoice/v1/CheckUser"/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+      <wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault>
+    </wsdl:operation>
+    <wsdl:operation name="SendInvoice">
+      <soap:operation soapAction="https://ws.kopru-ebelge.example/einvoice/v1/SendInvoice"/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+      <wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault>
+    </wsdl:operation>
+    <wsdl:operation name="GetInvoiceStatus">
+      <soap:operation soapAction="https://ws.kopru-ebelge.example/einvoice/v1/GetInvoiceStatus"/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+      <wsdl:fault name="ServiceFault"><soap:fault name="ServiceFault" use="literal"/></wsdl:fault>
+    </wsdl:operation>
+  </wsdl:binding>
+
+  <wsdl:service name="EInvoiceService">
+    <wsdl:documentation>Test endpoint for connector development; the production endpoint is given during onboarding with Köprü e-Belge.</wsdl:documentation>
+    <wsdl:port name="EInvoiceSoapPort" binding="tns:EInvoiceSoapBinding">
+      <soap:address location="https://ws-test.kopru-ebelge.example/einvoice/v1"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

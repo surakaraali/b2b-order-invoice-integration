@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:ein="https://ws.kopru-ebelge.example/einvoice/v1">
+  <soapenv:Body>
+    <ein:GetInvoiceStatusResponse>
+      <ein:ettn>8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b</ein:ettn>
+      <ein:status>DELIVERED</ein:status>
+      <ein:stateCode>1300</ein:stateCode>
+      <ein:stateDescription>Zarf başarıyla alıcıya iletildi</ein:stateDescription>
+      <ein:envelopeId>3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f</ein:envelopeId>
+      <ein:updatedAt>2027-03-06T15:42:10+03:00</ein:updatedAt>
+    </ein:GetInvoiceStatusResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

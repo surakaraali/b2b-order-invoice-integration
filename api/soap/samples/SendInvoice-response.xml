@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:ein="https://ws.kopru-ebelge.example/einvoice/v1">
+  <soapenv:Body>
+    <ein:SendInvoiceResponse>
+      <ein:receiptId>RCP-2027-0306-000481</ein:receiptId>
+      <ein:ettn>8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b</ein:ettn>
+      <ein:receivedAt>2027-03-06T15:31:12+03:00</ein:receivedAt>
+      <ein:status>QUEUED</ein:status>
+    </ein:SendInvoiceResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

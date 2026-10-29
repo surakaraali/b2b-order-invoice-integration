@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:ein="https://ws.kopru-ebelge.example/einvoice/v1">
+  <soapenv:Body>
+    <ein:CheckUserResponse>
+      <ein:vkn>6120345678</ein:vkn>
+      <ein:registered>true</ein:registered>
+      <ein:title>MARMARA TEKNOLOJİ ÜRÜNLERİ TİCARET A.Ş.</ein:title>
+      <ein:firstRegisteredAt>2019-04-01</ein:firstRegisteredAt>
+      <ein:aliases>
+        <ein:alias>
+          <ein:alias>urn:mail:defaultpk@marmarateknoloji.example</ein:alias>
+          <ein:kind>PK</ein:kind>
+          <ein:registeredAt>2019-04-01</ein:registeredAt>
+        </ein:alias>
+        <ein:alias>
+          <ein:alias>urn:mail:defaultgb@marmarateknoloji.example</ein:alias>
+          <ein:kind>GB</ein:kind>
+          <ein:registeredAt>2019-04-01</ein:registeredAt>
+        </ein:alias>
+      </ein:aliases>
+    </ein:CheckUserResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

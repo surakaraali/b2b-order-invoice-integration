@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SOAPAction: https://ws.kopru-ebelge.example/einvoice/v1/SendInvoice
+     content = base64 of a zip that holds 8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b.xml (samples/ubl-tr/invoice-VKT2027000001234.xml);
+     hash = SHA-256 of the zip bytes, computed from this sample (2311 bytes). -->
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:ein="https://ws.kopru-ebelge.example/einvoice/v1">
+  <soapenv:Header>
+    <wsse:Security soapenv:mustUnderstand="1"
+        xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
+        xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+      <wsse:UsernameToken wsu:Id="UsernameToken-1">
+        <wsse:Username>vektor-integration</wsse:Username>
+        <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">********</wsse:Password>
+        <wsu:Created>2027-03-06T12:30:05Z</wsu:Created>
+      </wsse:UsernameToken>
+    </wsse:Security>
+  </soapenv:Header>
+  <soapenv:Body>
+    <ein:SendInvoiceRequest>
+      <ein:document>
+        <ein:ettn>8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b</ein:ettn>
+        <ein:invoiceNo>VKT2027000001234</ein:invoiceNo>
+        <ein:profile>TEMELFATURA</ein:profile>
+        <ein:senderAlias>urn:mail:defaultgb@vektor-elektronik.example</ein:senderAlias>
+        <ein:receiverVkn>6120345678</ein:receiverVkn>
+        <ein:receiverAlias>urn:mail:defaultpk@marmarateknoloji.example</ein:receiverAlias>
+        <ein:contentType>application/zip</ein:contentType>
+        <ein:hashAlgorithm>SHA-256</ein:hashAlgorithm>
+        <ein:hash>0897792ddecc4d806042f26fbc364a06aadfc005ca3978fed11a7de2eaf778e3</ein:hash>
+        <ein:content>
+        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
+        </ein:content>
+      </ein:document>
+    </ein:SendInvoiceRequest>
+  </soapenv:Body>
+</soapenv:Envelope>

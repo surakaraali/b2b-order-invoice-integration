@@ -1,0 +1,1774 @@
+openapi: 3.1.0
+info:
+  title: Vektör Dealer Integration API
+  version: 1.0.0
+  summary: Order, stock and invoice integration between Vektör Elektronik Dağıtım A.Ş. and its dealers.
+  description: |
+    The dealer-facing REST API of the Vektör integration layer. Dealers' ERP systems and the Vektör dealer portal use it to
+    submit orders, query sellable stock, follow order status, read the product catalogue and receive invoice notifications.
+
+    This specification is part of a fictional business analysis case. Company names, URLs and figures are invented.
+    It is derived from the analysis documents in the same repository: the business requirements document (BRD), the use
+    cases, the field mapping, the error scenarios and the non-functional requirements.
+
+    ## Flows
+
+    * **Order**: `POST /orders` accepts an order with `202 Accepted`. Business rules run asynchronously; every status change is
+      pushed to the dealer with the `order.status.changed` webhook and can be read with `GET /orders/{orderId}`.
+    * **Stock**: `GET /stock` returns the sellable quantity per warehouse for up to 50 SKUs, at most 5 minutes old.
+    * **Invoice**: when an order ships, the e-Invoice is issued through the private integrator. Once it is delivered to the
+      dealer's GİB inbox, the `invoice.issued` webhook carries the ETTN and the amounts so that the dealer can match the
+      invoice automatically. `GET /invoices` and `GET /invoices/{ettn}` return the same content.
+
+    ## Authentication
+
+    OAuth2 client credentials. Each dealer has one client; tokens are valid for 60 minutes. The dealer is derived from the
+    token: a `dealerCode` in a request body must match it.
+
+    ## Idempotency
+
+    `POST /orders` requires an `Idempotency-Key` header (UUID v4). A repeat with the same key and the same body within 7 days
+    returns the original response and creates nothing. The same key with a different body is rejected with
+    `422 IDEMPOTENCY_KEY_REUSED`. A repeat while the first request is still being processed receives
+    `409 REQUEST_IN_PROGRESS` with `Retry-After`.
+
+    ## Errors
+
+    Errors use RFC 9457 Problem Details (`application/problem+json`) with three extension members: `code`, `requestId` and,
+    for validation failures, `errors`. `title` is English; `detail` and field messages follow `Accept-Language` (`tr`
+    default, `en` on request). Every response carries `X-Request-Id`; quote it in support tickets.
+
+    ## Rate limits
+
+    Per dealer: `GET /stock` 60 requests per minute, `POST /orders` 30 per minute, other `GET` endpoints 120 per minute.
+    Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; `429` and `503` carry
+    `Retry-After`.
+
+    ## Versioning
+
+    The major version is in the path (`/v1`). Adding optional request fields, response fields, endpoints and enumeration
+    values is a compatible change: clients must ignore unknown response fields and treat unknown enumeration values as
+    "other". Breaking changes ship as a new major version that runs in parallel for at least 6 months; the old version
+    then answers with `Deprecation` and `Sunset` headers.
+  contact:
+    name: Vektör integration team
+    email: integration@vektor-elektronik.example
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: https://api-sandbox.vektor-elektronik.example/v1
+    description: Sandbox for dealer connector development and onboarding tests
+  - url: https://api.vektor-elektronik.example/v1
+    description: Production
+
+security:
+  - oauth2ClientCredentials:
+      - 'orders:write'
+      - 'orders:read'
+      - 'stock:read'
+      - 'products:read'
+      - 'invoices:read'
+      - 'invoices:acknowledge'
+
+tags:
+  - name: Orders
+    description: Submit orders and follow their status.
+  - name: Stock
+    description: Sellable stock per warehouse.
+  - name: Products
+    description: Product catalogue and the dealer's price list.
+  - name: Invoices
+    description: Issued e-Invoices and acknowledgement of the match.
+  - name: Health
+    description: Service health, no authentication.
+
+paths:
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Submit an order
+      description: |
+        Validates the request, stores the order as `RECEIVED` and answers `202 Accepted`. The business rules (catalogue,
+        price list, minimum order quantity, credit limit, stock) run afterwards; the outcome arrives as an
+        `order.status.changed` webhook and is visible in `GET /orders/{orderId}`.
+
+        Prices, discounts, VAT and totals are not accepted in the request. Prices come from the dealer's price list and are
+        reported back in the status events.
+      operationId: submitOrder
+      security:
+        - oauth2ClientCredentials: ['orders:write']
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+            examples:
+              standard:
+                $ref: '#/components/examples/OrderRequestExample'
+      responses:
+        '202':
+          description: Order accepted and stored as `RECEIVED`. A repeated request with the same `Idempotency-Key` and body returns this same response.
+          headers:
+            Location:
+              description: URL of the created order.
+              schema:
+                type: string
+                examples: ['/v1/orders/VO-2027-000123']
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAccepted'
+              examples:
+                accepted:
+                  $ref: '#/components/examples/OrderAcceptedExample'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    get:
+      tags: [Orders]
+      summary: List orders
+      description: Orders of the authenticated dealer, newest first. Filter by dealer order number, status or creation date.
+      operationId: listOrders
+      security:
+        - oauth2ClientCredentials: ['orders:read']
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+        - name: dealerOrderNo
+          in: query
+          description: Exact match on the dealer's own order number.
+          schema:
+            type: string
+            maxLength: 30
+        - name: status
+          in: query
+          description: One or more statuses, comma separated.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderStatus'
+        - name: createdFrom
+          in: query
+          description: Orders created at or after this time.
+          schema:
+            type: string
+            format: date-time
+        - name: createdTo
+          in: query
+          description: Orders created before this time.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageToken'
+      responses:
+        '200':
+          description: A page of orders.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get an order
+      description: Current state of the order, its lines with approved quantities and prices, shipment and invoice references, and the full status history.
+      operationId: getOrder
+      security:
+        - oauth2ClientCredentials: ['orders:read']
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: The order.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              examples:
+                allocated:
+                  $ref: '#/components/examples/OrderExample'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /stock:
+    get:
+      tags: [Stock]
+      summary: Query sellable stock
+      description: |
+        Sellable quantity (on hand minus reserved) per warehouse for up to 50 SKUs. Figures may be up to 5 minutes old; the
+        `asOf` field says how old. Unknown or inactive SKUs are returned flagged, the request still succeeds. Exactly one
+        warehouse per item is marked `isShippingWarehouse`; that figure applies to the dealer's orders.
+      operationId: queryStock
+      security:
+        - oauth2ClientCredentials: ['stock:read']
+      parameters:
+        - name: sku
+          in: query
+          required: true
+          description: One or more SKUs, comma separated, at most 50.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 50
+            items:
+              type: string
+              maxLength: 20
+          example: ['100234', '100235', '999999']
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: Stock per requested SKU, in the order of the request.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockResponse'
+              examples:
+                mixed:
+                  $ref: '#/components/examples/StockResponseExample'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List products and the dealer's prices
+      description: |
+        The catalogue as it applies to the authenticated dealer: SKU, name, unit, minimum order quantity, VAT rate, status and
+        the unit price from the dealer's price list. Dealers use it to build and refresh the cross-reference between their
+        own item codes and Vektör SKUs (field mapping rule T6). Use `updatedSince` for incremental refreshes.
+      operationId: listProducts
+      security:
+        - oauth2ClientCredentials: ['products:read']
+      parameters:
+        - name: updatedSince
+          in: query
+          description: Only products changed at or after this time (master data or price).
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ProductStatus'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: A page of products.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductList'
+              examples:
+                page:
+                  $ref: '#/components/examples/ProductListExample'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: List issued invoices
+      description: Invoices delivered to the dealer's GİB inbox, newest first. The same content as the `invoice.issued` webhook, for dealers that poll or need to recover missed events.
+      operationId: listInvoices
+      security:
+        - oauth2ClientCredentials: ['invoices:read']
+      parameters:
+        - name: orderId
+          in: query
+          schema:
+            type: string
+            pattern: '^VO-\d{4}-\d{6}$'
+        - name: dealerOrderNo
+          in: query
+          schema:
+            type: string
+            maxLength: 30
+        - name: issuedFrom
+          in: query
+          description: Invoice date at or after this day.
+          schema:
+            type: string
+            format: date
+        - name: issuedTo
+          in: query
+          description: Invoice date at or before this day.
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: A page of invoices.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /invoices/{ettn}:
+    get:
+      tags: [Invoices]
+      summary: Get an invoice notification
+      description: The notification content for one invoice, identified by its ETTN. The UBL-TR document itself is delivered through GİB and the dealer's own integrator, not through this API.
+      operationId: getInvoice
+      security:
+        - oauth2ClientCredentials: ['invoices:read']
+      parameters:
+        - $ref: '#/components/parameters/Ettn'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: The invoice notification.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+              examples:
+                delivered:
+                  $ref: '#/components/examples/InvoiceExample'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /invoices/{ettn}/acknowledge:
+    post:
+      tags: [Invoices]
+      summary: Acknowledge an invoice match
+      description: |
+        Optional. Tells Vektör that the dealer matched and booked the invoice; the order becomes `CLOSED`. Without an
+        acknowledgement the order closes automatically 30 days after `INVOICED`. Repeating the call is a no-op that returns
+        the current state. Allowed only when the order is `INVOICED` or already `CLOSED`.
+      operationId: acknowledgeInvoice
+      security:
+        - oauth2ClientCredentials: ['invoices:acknowledge']
+      parameters:
+        - $ref: '#/components/parameters/Ettn'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeRequest'
+      responses:
+        '200':
+          description: Acknowledgement recorded, or already recorded.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcknowledgeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Service health
+      description: Liveness of the API, checked every minute by Vektör's monitoring. No authentication.
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: The service is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: The service is degraded or down.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+webhooks:
+  orderStatusChanged:
+    post:
+      tags: [Orders]
+      summary: Order status changed (sent to the dealer)
+      description: |
+        Sent to the dealer's registered webhook URL on every status change of an order. Delivered at least once; the dealer
+        must deduplicate by `eventId` and apply events in `sequence` order per order. Vektör expects a `2xx` answer within
+        10 seconds and retries 5 times (1, 5, 15, 60 and 240 minutes). A `410 Gone` answer stops retries. Each delivery is
+        signed: `X-Signature` is the hex HMAC-SHA256 of the raw body with the dealer's webhook secret, `X-Timestamp` is the
+        Unix time of sending; reject deliveries older than 5 minutes.
+      operationId: onOrderStatusChanged
+      parameters:
+        - $ref: '#/components/parameters/XEventId'
+        - $ref: '#/components/parameters/XSignature'
+        - $ref: '#/components/parameters/XTimestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderStatusChangedEvent'
+            examples:
+              pendingApproval:
+                $ref: '#/components/examples/OrderStatusChangedExample'
+      responses:
+        '200':
+          description: Event received. Any `2xx` counts as delivered.
+        '410':
+          description: The dealer no longer accepts events at this URL; Vektör stops retrying and flags the dealer.
+
+  invoiceIssued:
+    post:
+      tags: [Invoices]
+      summary: Invoice issued (sent to the dealer)
+      description: |
+        Sent when the e-Invoice is `DELIVERED` to the dealer's GİB inbox. Carries everything the dealer needs to find its
+        purchase order and pre-check the totals before the UBL-TR document is booked. Same delivery, retry and signature
+        rules as `orderStatusChanged`.
+      operationId: onInvoiceIssued
+      parameters:
+        - $ref: '#/components/parameters/XEventId'
+        - $ref: '#/components/parameters/XSignature'
+        - $ref: '#/components/parameters/XTimestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceIssuedEvent'
+            examples:
+              issued:
+                $ref: '#/components/examples/InvoiceIssuedExample'
+      responses:
+        '200':
+          description: Event received.
+        '410':
+          description: Stop sending events to this URL.
+
+components:
+  securitySchemes:
+    oauth2ClientCredentials:
+      type: oauth2
+      description: One client per dealer. Tokens are valid for 60 minutes. Secrets are rotated at least yearly.
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.vektor-elektronik.example/oauth2/token
+          scopes:
+            'orders:write': Submit orders
+            'orders:read': Read orders and their status
+            'stock:read': Query stock
+            'products:read': Read the product catalogue and prices
+            'invoices:read': Read issued invoices
+            'invoices:acknowledge': Acknowledge invoice matches
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID v4, unique per submission. Kept for 7 days. See the Idempotency section.
+      schema:
+        type: string
+        format: uuid
+      example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      description: Language of `detail` and field messages in error responses. Default `tr`.
+      schema:
+        type: string
+        enum: [tr, en]
+        default: tr
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional correlation id supplied by the caller; generated by Vektör when absent and returned on every response.
+      schema:
+        type: string
+        maxLength: 64
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: Vektör order number.
+      schema:
+        type: string
+        pattern: '^VO-\d{4}-\d{6}$'
+      example: VO-2027-000123
+    Ettn:
+      name: ettn
+      in: path
+      required: true
+      description: Invoice ETTN (UUID).
+      schema:
+        type: string
+        format: uuid
+      example: 8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b
+    PageSize:
+      name: pageSize
+      in: query
+      description: Items per page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    PageToken:
+      name: pageToken
+      in: query
+      description: Opaque token from the previous page's `nextPageToken`.
+      schema:
+        type: string
+        maxLength: 200
+    XEventId:
+      name: X-Event-Id
+      in: header
+      required: true
+      description: Same value as `eventId` in the body; use it to deduplicate.
+      schema:
+        type: string
+        format: uuid
+    XSignature:
+      name: X-Signature
+      in: header
+      required: true
+      description: Hex-encoded HMAC-SHA256 of the raw request body with the dealer's webhook secret.
+      schema:
+        type: string
+        pattern: '^[a-f0-9]{64}$'
+    XTimestamp:
+      name: X-Timestamp
+      in: header
+      required: true
+      description: Unix time (seconds) when the delivery attempt was made. Reject if older than 5 minutes.
+      schema:
+        type: integer
+        format: int64
+
+  headers:
+    XRequestId:
+      description: Correlation id of the request; quote it in support tickets.
+      schema:
+        type: string
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema:
+        type: integer
+        minimum: 1
+    XRateLimitLimit:
+      description: Requests allowed per minute for this endpoint and dealer.
+      schema:
+        type: integer
+    XRateLimitRemaining:
+      description: Requests remaining in the current minute.
+      schema:
+        type: integer
+    XRateLimitReset:
+      description: Unix time (seconds) when the window resets.
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: The request is invalid. `code` is `VALIDATION_FAILED` (with `errors`), `MISSING_IDEMPOTENCY_KEY` or `INVALID_IDEMPOTENCY_KEY`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+          examples:
+            validation:
+              $ref: '#/components/examples/ValidationProblemExample'
+    Unauthorized:
+      description: Missing, invalid or expired token. `code` is `UNAUTHORIZED`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The dealer may not do this. `code` is `DEALER_SUSPENDED`, `DEALER_MISMATCH` or `FORBIDDEN_RESOURCE`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: No such order or invoice for this dealer. `code` is `NOT_FOUND`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The request conflicts with the current state. `code` is `REQUEST_IN_PROGRESS` (with `Retry-After`), `DUPLICATE_DEALER_ORDER_NO` or `INVALID_STATE`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            duplicateDealerOrderNo:
+              $ref: '#/components/examples/ConflictExample'
+    PayloadTooLarge:
+      description: Body over 256 KB. `code` is `PAYLOAD_TOO_LARGE`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnsupportedMediaType:
+      description: Content type is not `application/json`. `code` is `UNSUPPORTED_MEDIA_TYPE`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: The `Idempotency-Key` was already used with a different body. `code` is `IDEMPOTENCY_KEY_REUSED`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Rate limit exceeded. `code` is `RATE_LIMIT_EXCEEDED`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/XRateLimitLimit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/XRateLimitRemaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/XRateLimitReset'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: Unexpected failure, logged under `requestId`. `code` is `INTERNAL_ERROR`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ServiceUnavailable:
+      description: ERP or integration database unreachable, or maintenance. `code` is `SERVICE_UNAVAILABLE`.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    # ---------- enumerations ----------
+    OrderStatus:
+      type: string
+      description: Order lifecycle (BRD section 7.5). Treat unknown values as "other".
+      enum: [RECEIVED, PENDING_APPROVAL, APPROVED, ALLOCATED, SHIPPED, INVOICED, CLOSED, REJECTED]
+    ReasonCode:
+      type: string
+      description: Why an order is pending or rejected.
+      enum: [CREDIT_LIMIT, PARTIAL_STOCK, INVALID_SKU, BELOW_MOQ, DEALER_SUSPENDED, CREDIT_LIMIT_REJECTED, STOCK_UNAVAILABLE, OTHER]
+    LineReasonCode:
+      type: string
+      enum: [PARTIAL_STOCK, REMOVED_BY_REPRESENTATIVE]
+    DecidedBy:
+      type: string
+      enum: [SYSTEM, SALES_REPRESENTATIVE, SALES_MANAGER]
+    StockItemStatus:
+      type: string
+      enum: [OK, UNKNOWN, INACTIVE]
+    ProductStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    UnitCode:
+      type: string
+      description: UN/ECE Recommendation 20 codes as used in UBL-TR.
+      enum: [C62, SET, KGM, MTR, LTR]
+    Currency:
+      type: string
+      enum: [TRY]
+    ErrorCode:
+      type: string
+      description: Error code catalogue (error scenarios, section 3.1).
+      enum:
+        - UNAUTHORIZED
+        - DEALER_SUSPENDED
+        - DEALER_MISMATCH
+        - FORBIDDEN_RESOURCE
+        - NOT_FOUND
+        - VALIDATION_FAILED
+        - MISSING_IDEMPOTENCY_KEY
+        - INVALID_IDEMPOTENCY_KEY
+        - IDEMPOTENCY_KEY_REUSED
+        - REQUEST_IN_PROGRESS
+        - DUPLICATE_DEALER_ORDER_NO
+        - INVALID_STATE
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - RATE_LIMIT_EXCEEDED
+        - INTERNAL_ERROR
+        - SERVICE_UNAVAILABLE
+    FieldErrorCode:
+      type: string
+      description: Field-level validation codes (error scenarios, section 3.2).
+      enum:
+        - FIELD_REQUIRED
+        - FIELD_TOO_LONG
+        - INVALID_FORMAT
+        - INVALID_DATE
+        - DATE_OUT_OF_RANGE
+        - NO_LINES
+        - TOO_MANY_LINES
+        - DUPLICATE_LINE_SKU
+        - QUANTITY_NOT_POSITIVE
+        - QUANTITY_NOT_INTEGER
+        - INVALID_UNIT
+        - INVALID_CITY
+        - INVALID_COUNTRY
+        - INVALID_ADDRESS_CODE
+        - TOO_MANY_SKUS
+        - UNKNOWN_FIELD
+
+    # ---------- common ----------
+    Money:
+      type: number
+      description: Amount with 2 decimals.
+      multipleOf: 0.01
+      minimum: 0
+    Quantity:
+      type: number
+      description: Quantity with up to 3 decimals. Whole numbers for piece units (`C62`, `SET`).
+      multipleOf: 0.001
+      exclusiveMinimum: 0
+    Links:
+      type: object
+      properties:
+        self:
+          type: string
+          description: URL of this resource.
+      additionalProperties:
+        type: string
+
+    # ---------- order request ----------
+    DeliveryAddress:
+      type: object
+      description: Either `addressCode` of a saved address, or the structured fields. When `addressCode` is given, the other fields are ignored.
+      properties:
+        addressCode:
+          type: string
+          maxLength: 20
+        addressLine1:
+          type: string
+          maxLength: 120
+        addressLine2:
+          type: string
+          maxLength: 120
+        district:
+          type: string
+          maxLength: 50
+          description: İlçe.
+        city:
+          type: string
+          maxLength: 50
+          description: İl, one of the 81 provinces.
+        postalCode:
+          type: string
+          pattern: '^\d{5}$'
+        countryCode:
+          type: string
+          enum: [TR]
+          default: TR
+        contactName:
+          type: string
+          maxLength: 100
+        contactPhone:
+          type: string
+          maxLength: 20
+          pattern: '^[+0-9 ]+$'
+      anyOf:
+        - required: [addressCode]
+        - required: [addressLine1, district, city]
+    OrderLineRequest:
+      type: object
+      required: [lineNo, sku, quantity]
+      properties:
+        lineNo:
+          type: integer
+          minimum: 1
+          description: 1-based, contiguous.
+        sku:
+          type: string
+          maxLength: 20
+          description: Vektör SKU. The dealer translates its own item code before sending.
+        dealerItemCode:
+          type: string
+          maxLength: 50
+          description: The dealer's own item code, echoed back in events and in the UBL `BuyersItemIdentification`.
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        unitCode:
+          $ref: '#/components/schemas/UnitCode'
+        dealerLineRef:
+          type: string
+          maxLength: 30
+      additionalProperties: false
+    OrderRequest:
+      type: object
+      required: [dealerCode, dealerOrderNo, orderDate, deliveryAddress, lines]
+      properties:
+        dealerCode:
+          type: string
+          maxLength: 10
+          description: Must equal the dealer of the token.
+        dealerOrderNo:
+          type: string
+          maxLength: 30
+          description: The dealer's own order number, unique per dealer among non-rejected orders.
+        orderDate:
+          type: string
+          format: date
+          description: Not in the future, not older than 30 days.
+        requestedDeliveryDate:
+          type: string
+          format: date
+          description: Informational in this version.
+        deliveryAddress:
+          $ref: '#/components/schemas/DeliveryAddress'
+        dealerNote:
+          type: string
+          maxLength: 500
+          description: Shown to the sales representative.
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/OrderLineRequest'
+      additionalProperties: false
+
+    # ---------- order responses ----------
+    OrderAccepted:
+      type: object
+      required: [orderId, dealerOrderNo, status, receivedAt, links]
+      properties:
+        orderId:
+          type: string
+          pattern: '^VO-\d{4}-\d{6}$'
+        dealerOrderNo:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        receivedAt:
+          type: string
+          format: date-time
+        links:
+          $ref: '#/components/schemas/Links'
+    OrderLine:
+      type: object
+      required: [lineNo, sku, requestedQuantity, approvedQuantity, unitCode]
+      properties:
+        lineNo:
+          type: integer
+        sku:
+          type: string
+        dealerItemCode:
+          type: string
+        requestedQuantity:
+          $ref: '#/components/schemas/Quantity'
+        approvedQuantity:
+          type: number
+          multipleOf: 0.001
+          minimum: 0
+          description: Equal to the requested quantity unless reduced by a representative; 0 when the line was removed.
+        unitCode:
+          $ref: '#/components/schemas/UnitCode'
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        vatRate:
+          type: number
+          description: Percent, for example 20.
+        lineReasonCode:
+          $ref: '#/components/schemas/LineReasonCode'
+        dealerLineRef:
+          type: string
+    OrderTotals:
+      type: object
+      required: [netAmount, vatAmount, grossAmount, currency]
+      properties:
+        netAmount:
+          $ref: '#/components/schemas/Money'
+        vatAmount:
+          $ref: '#/components/schemas/Money'
+        grossAmount:
+          $ref: '#/components/schemas/Money'
+        currency:
+          $ref: '#/components/schemas/Currency'
+    Shipment:
+      type: object
+      required: [shippedAt, warehouseCode, deliveryNoteNo]
+      properties:
+        shippedAt:
+          type: string
+          format: date-time
+        warehouseCode:
+          type: string
+          enum: [IST, ANK, IZM]
+        deliveryNoteNo:
+          type: string
+          maxLength: 16
+        carrier:
+          type: string
+          maxLength: 50
+        trackingNo:
+          type: string
+          maxLength: 50
+        packages:
+          type: integer
+          minimum: 1
+    InvoiceRef:
+      type: object
+      required: [ettn, invoiceNo]
+      properties:
+        ettn:
+          type: string
+          format: uuid
+        invoiceNo:
+          type: string
+    StatusHistoryEntry:
+      type: object
+      required: [sequence, status, occurredAt]
+      properties:
+        sequence:
+          type: integer
+          minimum: 1
+          description: Increases by one per status change of this order; the same value appears in the webhook event.
+        previousStatus:
+          $ref: '#/components/schemas/OrderStatus'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        reasonCode:
+          $ref: '#/components/schemas/ReasonCode'
+        decidedBy:
+          $ref: '#/components/schemas/DecidedBy'
+        occurredAt:
+          type: string
+          format: date-time
+    Order:
+      type: object
+      required: [orderId, dealerCode, dealerOrderNo, status, orderDate, deliveryAddress, lines, createdAt, updatedAt, history, links]
+      properties:
+        orderId:
+          type: string
+        dealerCode:
+          type: string
+        dealerOrderNo:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        reasonCode:
+          $ref: '#/components/schemas/ReasonCode'
+        reasonText:
+          type: string
+          maxLength: 500
+        decidedBy:
+          $ref: '#/components/schemas/DecidedBy'
+        orderDate:
+          type: string
+          format: date
+        requestedDeliveryDate:
+          type: string
+          format: date
+        deliveryAddress:
+          $ref: '#/components/schemas/DeliveryAddress'
+        dealerNote:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLine'
+        totals:
+          $ref: '#/components/schemas/OrderTotals'
+        shipment:
+          $ref: '#/components/schemas/Shipment'
+        invoice:
+          $ref: '#/components/schemas/InvoiceRef'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusHistoryEntry'
+        links:
+          $ref: '#/components/schemas/Links'
+    OrderList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        nextPageToken:
+          type: string
+          description: Absent on the last page.
+
+    # ---------- stock ----------
+    StockWarehouse:
+      type: object
+      required: [warehouseCode, isShippingWarehouse, sellableQuantity]
+      properties:
+        warehouseCode:
+          type: string
+          enum: [IST, ANK, IZM]
+        isShippingWarehouse:
+          type: boolean
+          description: True for the warehouse that ships this dealer's orders.
+        sellableQuantity:
+          type: number
+          multipleOf: 0.001
+          minimum: 0
+        expectedReceiptDate:
+          type: string
+          format: date
+        expectedReceiptQuantity:
+          type: number
+          multipleOf: 0.001
+          minimum: 0
+    StockItem:
+      type: object
+      required: [sku, status]
+      properties:
+        sku:
+          type: string
+        status:
+          $ref: '#/components/schemas/StockItemStatus'
+        unitCode:
+          $ref: '#/components/schemas/UnitCode'
+        minimumOrderQuantity:
+          $ref: '#/components/schemas/Quantity'
+        warehouses:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockWarehouse'
+    StockResponse:
+      type: object
+      required: [asOf, items]
+      properties:
+        asOf:
+          type: string
+          format: date-time
+          description: Age of the figures; at most 5 minutes old.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockItem'
+
+    # ---------- products ----------
+    PriceListEntry:
+      type: object
+      required: [unitPrice, currency, validFrom]
+      properties:
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        validFrom:
+          type: string
+          format: date
+        validTo:
+          type: string
+          format: date
+    Product:
+      type: object
+      required: [sku, name, unitCode, minimumOrderQuantity, vatRate, status, updatedAt]
+      properties:
+        sku:
+          type: string
+          maxLength: 20
+        name:
+          type: string
+          maxLength: 200
+        brand:
+          type: string
+          maxLength: 50
+        category:
+          type: string
+          maxLength: 50
+        unitCode:
+          $ref: '#/components/schemas/UnitCode'
+        minimumOrderQuantity:
+          $ref: '#/components/schemas/Quantity'
+        vatRate:
+          type: number
+          enum: [1, 10, 20]
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        price:
+          $ref: '#/components/schemas/PriceListEntry'
+        updatedAt:
+          type: string
+          format: date-time
+    ProductList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        nextPageToken:
+          type: string
+
+    # ---------- invoices ----------
+    InvoiceLine:
+      type: object
+      required: [lineNo, sku, quantity, unitCode, unitPrice, vatRate, lineTotal]
+      properties:
+        lineNo:
+          type: integer
+        sku:
+          type: string
+        dealerItemCode:
+          type: string
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        unitCode:
+          $ref: '#/components/schemas/UnitCode'
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        vatRate:
+          type: number
+        lineTotal:
+          $ref: '#/components/schemas/Money'
+    Invoice:
+      type: object
+      required: [ettn, invoiceNo, invoiceDate, profile, invoiceType, orderId, dealerOrderNo, deliveryNoteNo, currency, lineExtensionAmount, taxAmount, payableAmount, lines, deliveredAt, links]
+      properties:
+        ettn:
+          type: string
+          format: uuid
+        invoiceNo:
+          type: string
+          pattern: '^[A-Z]{3}\d{4}\d{9}$'
+          description: GİB format, series `VKT`.
+        invoiceDate:
+          type: string
+          format: date
+        profile:
+          type: string
+          enum: [TEMELFATURA]
+        invoiceType:
+          type: string
+          enum: [SATIS]
+        orderId:
+          type: string
+        dealerOrderNo:
+          type: string
+        deliveryNoteNo:
+          type: string
+        currency:
+          $ref: '#/components/schemas/Currency'
+        lineExtensionAmount:
+          $ref: '#/components/schemas/Money'
+        taxAmount:
+          $ref: '#/components/schemas/Money'
+        payableAmount:
+          $ref: '#/components/schemas/Money'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLine'
+        deliveredAt:
+          type: string
+          format: date-time
+          description: When the integrator reported `DELIVERED`.
+        acknowledgedAt:
+          type: string
+          format: date-time
+        links:
+          $ref: '#/components/schemas/Links'
+    InvoiceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        nextPageToken:
+          type: string
+    AcknowledgeRequest:
+      type: object
+      properties:
+        dealerDocumentNo:
+          type: string
+          maxLength: 30
+          description: The dealer's own booking reference, for support.
+      additionalProperties: false
+    AcknowledgeResponse:
+      type: object
+      required: [ettn, orderId, orderStatus, acknowledgedAt]
+      properties:
+        ettn:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        orderStatus:
+          $ref: '#/components/schemas/OrderStatus'
+        acknowledgedAt:
+          type: string
+          format: date-time
+
+    # ---------- webhooks ----------
+    EventEnvelope:
+      type: object
+      required: [eventId, eventType, occurredAt]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [order.status.changed, invoice.issued]
+        occurredAt:
+          type: string
+          format: date-time
+    OrderStatusChangedEvent:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [sequence, orderId, dealerOrderNo, previousStatus, status, links]
+          properties:
+            sequence:
+              type: integer
+              minimum: 1
+              description: Per-order sequence of the status change; apply events in this order and ignore an event whose sequence is not higher than the last one applied.
+            orderId:
+              type: string
+            dealerOrderNo:
+              type: string
+            previousStatus:
+              $ref: '#/components/schemas/OrderStatus'
+            status:
+              $ref: '#/components/schemas/OrderStatus'
+            reasonCode:
+              $ref: '#/components/schemas/ReasonCode'
+            reasonText:
+              type: string
+            decidedBy:
+              $ref: '#/components/schemas/DecidedBy'
+            lines:
+              type: array
+              description: Present for `APPROVED`, `ALLOCATED` and `REJECTED`.
+              items:
+                $ref: '#/components/schemas/OrderLine'
+            totals:
+              $ref: '#/components/schemas/OrderTotals'
+            shipment:
+              $ref: '#/components/schemas/Shipment'
+            invoice:
+              $ref: '#/components/schemas/InvoiceRef'
+            links:
+              $ref: '#/components/schemas/Links'
+    InvoiceIssuedEvent:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - $ref: '#/components/schemas/Invoice'
+
+    # ---------- errors ----------
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with Vektör extensions.
+      required: [type, title, status, code, requestId, timestamp]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Stable URI per code.
+        title:
+          type: string
+          description: Short English summary, fixed per code.
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Explanation in the language of `Accept-Language`.
+        instance:
+          type: string
+          description: Request path.
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    FieldError:
+      type: object
+      required: [code, field, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/FieldErrorCode'
+        field:
+          type: string
+          description: Path of the field, for example `lines[2].quantity`.
+        message:
+          type: string
+    ValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldError'
+
+    # ---------- health ----------
+    Health:
+      type: object
+      required: [status, time]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        time:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+  examples:
+    OrderRequestExample:
+      summary: A two-line order from a connected dealer
+      value:
+        dealerCode: D00042
+        dealerOrderNo: PO-2027-00891
+        orderDate: '2027-03-05'
+        requestedDeliveryDate: '2027-03-09'
+        deliveryAddress:
+          addressCode: MAIN
+        dealerNote: Please ship both lines together.
+        lines:
+          - lineNo: 1
+            sku: '100234'
+            dealerItemCode: TV-VX55Q
+            quantity: 6
+            unitCode: C62
+          - lineNo: 2
+            sku: '200117'
+            dealerItemCode: SB-VX300
+            quantity: 12
+            unitCode: C62
+    OrderAcceptedExample:
+      summary: 202 Accepted
+      value:
+        orderId: VO-2027-000123
+        dealerOrderNo: PO-2027-00891
+        status: RECEIVED
+        receivedAt: '2027-03-05T09:14:07+03:00'
+        links:
+          self: /v1/orders/VO-2027-000123
+    OrderExample:
+      summary: An allocated order with history
+      value:
+        orderId: VO-2027-000123
+        dealerCode: D00042
+        dealerOrderNo: PO-2027-00891
+        status: ALLOCATED
+        decidedBy: SYSTEM
+        orderDate: '2027-03-05'
+        requestedDeliveryDate: '2027-03-09'
+        deliveryAddress:
+          addressCode: MAIN
+          addressLine1: Sanayi Cad. No 18
+          district: Çayırova
+          city: Kocaeli
+          postalCode: '41420'
+          countryCode: TR
+        lines:
+          - lineNo: 1
+            sku: '100234'
+            dealerItemCode: TV-VX55Q
+            requestedQuantity: 6
+            approvedQuantity: 6
+            unitCode: C62
+            unitPrice: 18450.00
+            currency: TRY
+            vatRate: 20
+          - lineNo: 2
+            sku: '200117'
+            dealerItemCode: SB-VX300
+            requestedQuantity: 12
+            approvedQuantity: 12
+            unitCode: C62
+            unitPrice: 2890.00
+            currency: TRY
+            vatRate: 20
+        totals:
+          netAmount: 145380.00
+          vatAmount: 29076.00
+          grossAmount: 174456.00
+          currency: TRY
+        createdAt: '2027-03-05T09:14:07+03:00'
+        updatedAt: '2027-03-05T09:14:52+03:00'
+        history:
+          - sequence: 1
+            status: RECEIVED
+            occurredAt: '2027-03-05T09:14:07+03:00'
+          - sequence: 2
+            previousStatus: RECEIVED
+            status: APPROVED
+            decidedBy: SYSTEM
+            occurredAt: '2027-03-05T09:14:48+03:00'
+          - sequence: 3
+            previousStatus: APPROVED
+            status: ALLOCATED
+            occurredAt: '2027-03-05T09:14:52+03:00'
+        links:
+          self: /v1/orders/VO-2027-000123
+    StockResponseExample:
+      summary: Two known SKUs and one unknown
+      value:
+        asOf: '2027-03-05T09:10:00+03:00'
+        items:
+          - sku: '100234'
+            status: OK
+            unitCode: C62
+            minimumOrderQuantity: 2
+            warehouses:
+              - warehouseCode: IST
+                isShippingWarehouse: true
+                sellableQuantity: 48
+              - warehouseCode: ANK
+                isShippingWarehouse: false
+                sellableQuantity: 15
+              - warehouseCode: IZM
+                isShippingWarehouse: false
+                sellableQuantity: 0
+                expectedReceiptDate: '2027-03-12'
+                expectedReceiptQuantity: 40
+          - sku: '100235'
+            status: OK
+            unitCode: C62
+            minimumOrderQuantity: 1
+            warehouses:
+              - warehouseCode: IST
+                isShippingWarehouse: true
+                sellableQuantity: 0
+                expectedReceiptDate: '2027-03-08'
+                expectedReceiptQuantity: 20
+              - warehouseCode: ANK
+                isShippingWarehouse: false
+                sellableQuantity: 3
+              - warehouseCode: IZM
+                isShippingWarehouse: false
+                sellableQuantity: 7
+          - sku: '999999'
+            status: UNKNOWN
+    ProductListExample:
+      summary: First page of the catalogue
+      value:
+        items:
+          - sku: '100234'
+            name: VX-55Q 55-inch 4K television
+            brand: Vektör Home
+            category: Television
+            unitCode: C62
+            minimumOrderQuantity: 2
+            vatRate: 20
+            status: ACTIVE
+            price:
+              unitPrice: 18450.00
+              currency: TRY
+              validFrom: '2027-01-01'
+            updatedAt: '2027-02-20T08:00:00+03:00'
+          - sku: '200117'
+            name: VX-300 soundbar
+            brand: Vektör Home
+            category: Audio
+            unitCode: C62
+            minimumOrderQuantity: 4
+            vatRate: 20
+            status: ACTIVE
+            price:
+              unitPrice: 2890.00
+              currency: TRY
+              validFrom: '2027-01-01'
+            updatedAt: '2027-02-20T08:00:00+03:00'
+        nextPageToken: eyJvZmZzZXQiOjUwfQ
+    InvoiceExample:
+      summary: A delivered invoice
+      value:
+        ettn: 8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b
+        invoiceNo: VKT2027000001234
+        invoiceDate: '2027-03-06'
+        profile: TEMELFATURA
+        invoiceType: SATIS
+        orderId: VO-2027-000123
+        dealerOrderNo: PO-2027-00891
+        deliveryNoteNo: IRS2027000000987
+        currency: TRY
+        lineExtensionAmount: 145380.00
+        taxAmount: 29076.00
+        payableAmount: 174456.00
+        lines:
+          - lineNo: 1
+            sku: '100234'
+            dealerItemCode: TV-VX55Q
+            quantity: 6
+            unitCode: C62
+            unitPrice: 18450.00
+            vatRate: 20
+            lineTotal: 110700.00
+          - lineNo: 2
+            sku: '200117'
+            dealerItemCode: SB-VX300
+            quantity: 12
+            unitCode: C62
+            unitPrice: 2890.00
+            vatRate: 20
+            lineTotal: 34680.00
+        deliveredAt: '2027-03-06T15:42:10+03:00'
+        links:
+          self: /v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b
+          acknowledge: /v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b/acknowledge
+    OrderStatusChangedExample:
+      summary: Order moved to PENDING_APPROVAL
+      value:
+        eventId: 4b2d7c1e-9f3a-4c8b-a1d2-3e4f5a6b7c8d
+        eventType: order.status.changed
+        occurredAt: '2027-03-05T09:14:48+03:00'
+        sequence: 2
+        orderId: VO-2027-000123
+        dealerOrderNo: PO-2027-00891
+        previousStatus: RECEIVED
+        status: PENDING_APPROVAL
+        reasonCode: CREDIT_LIMIT
+        decidedBy: SYSTEM
+        links:
+          self: /v1/orders/VO-2027-000123
+    InvoiceIssuedExample:
+      summary: Invoice delivered to the dealer's inbox
+      value:
+        eventId: 0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        eventType: invoice.issued
+        occurredAt: '2027-03-06T15:42:15+03:00'
+        ettn: 8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b
+        invoiceNo: VKT2027000001234
+        invoiceDate: '2027-03-06'
+        profile: TEMELFATURA
+        invoiceType: SATIS
+        orderId: VO-2027-000123
+        dealerOrderNo: PO-2027-00891
+        deliveryNoteNo: IRS2027000000987
+        currency: TRY
+        lineExtensionAmount: 145380.00
+        taxAmount: 29076.00
+        payableAmount: 174456.00
+        lines:
+          - lineNo: 1
+            sku: '100234'
+            dealerItemCode: TV-VX55Q
+            quantity: 6
+            unitCode: C62
+            unitPrice: 18450.00
+            vatRate: 20
+            lineTotal: 110700.00
+          - lineNo: 2
+            sku: '200117'
+            dealerItemCode: SB-VX300
+            quantity: 12
+            unitCode: C62
+            unitPrice: 2890.00
+            vatRate: 20
+            lineTotal: 34680.00
+        deliveredAt: '2027-03-06T15:42:10+03:00'
+        links:
+          self: /v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b
+          acknowledge: /v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b/acknowledge
+    ValidationProblemExample:
+      summary: Two field errors
+      value:
+        type: https://api.vektor-elektronik.example/problems/validation-failed
+        title: Validation failed
+        status: 400
+        detail: İstek 2 alanda doğrulamadan geçemedi.
+        instance: /v1/orders
+        code: VALIDATION_FAILED
+        requestId: req_01J9X4M3Q8
+        timestamp: '2027-03-05T09:14:07+03:00'
+        errors:
+          - code: FIELD_REQUIRED
+            field: deliveryAddress.city
+            message: city alanı zorunludur.
+          - code: QUANTITY_NOT_INTEGER
+            field: lines[2].quantity
+            message: Adet birimi için miktar tam sayı olmalıdır.
+    ConflictExample:
+      summary: Dealer order number already used
+      value:
+        type: https://api.vektor-elektronik.example/problems/duplicate-dealer-order-no
+        title: Dealer order number already used
+        status: 409
+        detail: Bu bayi sipariş numarası daha önce gönderilmiş.
+        instance: /v1/orders
+        code: DUPLICATE_DEALER_ORDER_NO
+        requestId: req_01J9X4N7ZK
+        timestamp: '2027-03-05T09:16:30+03:00'

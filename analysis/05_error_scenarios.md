@@ -304,7 +304,7 @@ Each test runs against the test environment with a dedicated test dealer. The id
 
 | ID | Point | Owner | Needed by |
 |---|---|---|---|
-| E1 | Add a per-order `sequence` number to the status event so that dealers can order events without comparing timestamps (change request to the field mapping). | Integration team | API design |
+| E1 | Add a per-order `sequence` number to the status event so that dealers can order events without comparing timestamps. Resolved: added in field mapping 1.1 and in the OpenAPI specification. | Integration team | Done |
 | E2 | Confirm with Köprü e-Belge when a failed invoice may be resent with the same ETTN and when a new document is required. | Integration team | Before pilot |
 | E3 | Confirm with finance the manual correction process for a delivered invoice with wrong totals (return invoice is out of scope in this version). | Finance | Before pilot |
 | E4 | Decide whether `410 Gone` from a dealer endpoint should also pause all further events for that dealer until re-registration. | Sales Operations | API design |

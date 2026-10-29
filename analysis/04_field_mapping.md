@@ -5,8 +5,8 @@
 | | |
 |---|---|
 | **Project** | B2B Order, Stock and Invoice Integration |
-| **Document** | Field mapping and data dictionary, version 1.0 |
-| **Status** | Approved |
+| **Document** | Field mapping and data dictionary, version 1.1 |
+| **Status** | Approved; 1.1 adds the `sequence` field to the order status event (error scenarios open point E1) |
 | **Author** | Sura Karaali, Business Analyst |
 | **Date** | 29 October 2026 |
 | **Related documents** | [01 BRD](01_brd.md), [03 Use cases](03_use_cases.md), [05 Error scenarios](05_error_scenarios.md), API specification in `api/openapi/` |
@@ -117,6 +117,7 @@ Direction: API to dealer ERP or portal. Message: webhook `order.status.changed`,
 | `eventId` | UUID | M | Connector log | Connector log | Ignore a repeated `eventId` |
 | `eventType` | string | M | | | Always `order.status.changed` |
 | `occurredAt` | timestamp | M | `OPOR.U_VK_StatusAt` | Defined field | |
+| `sequence` | integer | M | Connector log | Connector log | Increases by one per status change of the order; apply events in this order and ignore an event whose `sequence` is not higher than the last one applied (added in version 1.1) |
 | `orderId` | string | M | `OPOR.U_VK_OrderId` | `ORFICHE.DOCODE` | |
 | `dealerOrderNo` | string(30) | M | Lookup key: `OPOR.DocNum` | Lookup key: `ORFICHE.FICHENO` | The connector finds the purchase order with this value |
 | `previousStatus` | enum | M | | | Section 8.1 |

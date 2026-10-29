@@ -32,7 +32,7 @@ Returns and cancellations are out of scope for this version.
 | Field mapping: dealer ERP ↔ distributor API ↔ UBL-TR | `analysis/04_field_mapping.md`, `analysis/04_field_mapping.xlsx` | Done |
 | Error, retry and idempotency scenarios | `analysis/05_error_scenarios.md` | Done |
 | Non-functional requirements (SLA, security, performance) | `analysis/06_nfr.md` | Done |
-| OpenAPI specification for the order and stock API | `api/openapi/` | Planned |
+| OpenAPI specification for the dealer API (orders, stock, products, invoices, webhooks) | `api/openapi/vektor-dealer-api.v1.yaml` | Done |
 | e-Invoice SOAP contract and sample UBL-TR messages | `api/soap/` | Planned |
 | Postman collection with tests | `api/postman/` | Planned |
 | Reconciliation SQL on synthetic integration data (DuckDB) | `sql/`, `scripts/` | Planned |

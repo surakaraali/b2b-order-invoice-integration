@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    participant D as Dealer ERP or portal
+    participant API as Integration API
+    participant ERP as Vektör ERP
+    participant REP as Sales representative
+
+    D->>API: POST /orders with Idempotency-Key and order lines
+    API->>API: Authenticate, validate schema
+    alt Invalid request
+        API-->>D: 400 Bad Request with error codes, no order created
+    else Same Idempotency-Key seen in the last 7 days
+        API-->>D: Original response, no new order
+    else Valid and new
+        API->>API: Store order as RECEIVED
+        API-->>D: 202 Accepted with orderId and status RECEIVED
+        API->>ERP: Read catalogue, price list, credit data, stock
+        ERP-->>API: Data
+        API->>API: Run business rules RULE-01 to RULE-06
+        alt All checks pass
+            API->>ERP: Reserve stock in the shipping warehouse
+            ERP-->>API: Reservation confirmed
+            API->>API: APPROVED, then ALLOCATED
+        else Credit limit exceeded or partial stock
+            API->>API: PENDING_APPROVAL with reason code
+            API->>REP: Create approval task
+            REP-->>API: Approve, approve with reduced quantities, or reject
+            opt Approved
+                API->>ERP: Reserve stock
+                ERP-->>API: Reservation confirmed
+                API->>API: APPROVED, then ALLOCATED
+            end
+        end
+        API-->>D: Webhook order.status.changed on every change
+    end

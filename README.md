@@ -34,7 +34,7 @@ Returns and cancellations are out of scope for this version.
 | Non-functional requirements (SLA, security, performance) | `analysis/06_nfr.md` | Done |
 | OpenAPI specification for the dealer API (orders, stock, products, invoices, webhooks) | `api/openapi/vektor-dealer-api.v1.yaml` | Done |
 | e-Invoice SOAP contract (WSDL) and sample UBL-TR messages | `api/soap/` | Done |
-| Postman collection with tests | `api/postman/` | Planned |
+| Postman collection with tests, sandbox simulator and test report | `api/postman/` | Done |
 | Reconciliation SQL on synthetic integration data (DuckDB) | `sql/`, `scripts/` | Planned |
 | Product backlog, sprint plan, JIRA and Confluence screenshots | `agile/` | Planned |
 | Dealer portal wireframes (Figma) | `design/wireframes/` | Planned |

@@ -1,0 +1,505 @@
+newman
+
+Vektör Dealer Integration API
+
+Folder 00 Setup
+Sub-folder Setup · Get dealer access token
+  POST http://127.0.0.1:8040/oauth2/token [200 OK, 403B, 20ms]
+  Pass  200 OK
+  Pass  Bearer token valid for 60 minutes
+
+Folder 01 Happy path
+Sub-folder HP-01 · Service health
+  GET http://127.0.0.1:8040/v1/health [200 OK, 288B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the Health schema
+  Pass  Status is ok
+
+Sub-folder HP-02 · Product catalogue, first page
+  GET http://127.0.0.1:8040/v1/products?pageSize=5 [200 OK, 1.86kB, 5ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the ProductList schema
+  Pass  Five products and a next page token
+  Pass  Every product carries a price from the dealer price list
+
+Sub-folder HP-03 · Product catalogue, last page
+  GET http://127.0.0.1:8040/v1/products?pageSize=5&pageToken=eyJvZmZzZXQiOiA1fQ [200 OK, 1.23kB, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the ProductList schema
+  Pass  Last page: three products, no next page token
+  Pass  No product repeats from the first page
+  Pass  The discontinued kettle is listed as INACTIVE
+
+Sub-folder HP-04 · Query sellable stock
+  GET http://127.0.0.1:8040/v1/stock?sku=100234,200117 [200 OK, 1.08kB, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the StockResponse schema
+  Pass  Both SKUs are OK, in request order
+  Pass  Exactly one shipping warehouse per item, IST for this dealer
+  Pass  Rate limit headers are present (60 per minute)
+
+Sub-folder HP-05 · Submit an order
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 258ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  202 Accepted
+  Pass  Matches the OrderAccepted schema
+  Pass  Stored as RECEIVED with the dealer order number
+  Pass  Location header points to the new order
+  Pass  Order rate limit is 30 per minute
+
+Sub-folder HP-06 · Read the order
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-000201 [200 OK, 1.61kB, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the Order schema
+  Pass  Approved by the system and allocated
+  Pass  History RECEIVED, APPROVED, ALLOCATED with sequence 1 to 3
+  Pass  Prices come from the price list; full quantities approved
+  Pass  Totals: net 48,460.00, VAT 9,692.00, gross 58,152.00
+  Pass  Saved address MAIN resolved to the full address
+
+Sub-folder HP-07 · Stock after the reservation
+  GET http://127.0.0.1:8040/v1/stock?sku=100234 [200 OK, 738B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  IST sellable quantity dropped by 2
+
+Sub-folder HP-08 · Find the order by dealer order number
+  GET http://127.0.0.1:8040/v1/orders?dealerOrderNo=PO-MVY8AJ1Z-HP05 [200 OK, 1.63kB, 3ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the OrderList schema
+  Pass  Exactly the submitted order
+
+Sub-folder HP-09 · Order above the credit limit goes to approval
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 259ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  202 Accepted
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-000202 [200 OK, 1.27kB, 2ms]
+  Pass  PENDING_APPROVAL with reason CREDIT_LIMIT
+  Pass  No stock reserved while pending
+
+Sub-folder HP-10 · Order with partial stock goes to approval
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 259ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  202 Accepted
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-000203 [200 OK, 1.31kB, 2ms]
+  Pass  PENDING_APPROVAL with reason PARTIAL_STOCK
+  Pass  The short line is marked PARTIAL_STOCK
+
+Sub-folder HP-11 · Invoices of the case order
+  GET http://127.0.0.1:8040/v1/invoices?orderId=VO-2027-000123 [200 OK, 1.17kB, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the InvoiceList schema
+  Pass  One invoice, VKT2027000001234
+
+Sub-folder HP-12 · Read the invoice notification
+  GET http://127.0.0.1:8040/v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b [200 OK, 1.16kB, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the Invoice schema
+  Pass  Amounts match the UBL-TR sample: 145,380.00 + 29,076.00 = 174,456.00
+  Pass  Line totals add up to the net amount
+  Pass  Carries the dealer order number for matching
+
+Sub-folder HP-13 · Acknowledge the invoice match
+  POST http://127.0.0.1:8040/v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b/acknowledge [200 OK, 438B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the AcknowledgeResponse schema
+  Pass  Order is CLOSED
+
+Sub-folder HP-14 · Acknowledge again
+  POST http://127.0.0.1:8040/v1/invoices/8f7a9c2e-1b3d-4e5f-9a6b-7c8d9e0f1a2b/acknowledge [200 OK, 438B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Same acknowledgement time, still CLOSED
+
+Sub-folder HP-15 · The case order is closed
+  GET http://127.0.0.1:8040/v1/orders/VO-2027-000123 [200 OK, 2.18kB, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the Order schema
+  Pass  Status CLOSED after INVOICED
+  Pass  Sequence numbers increase by one
+
+Folder 02 Negative tests
+Sub-folder NT-01 · A1 Request fails validation on two fields
+  POST http://127.0.0.1:8040/v1/orders [400 Bad Request, 846B, 257ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code VALIDATION_FAILED
+  Pass  Matches the ValidationProblem schema
+  Pass  Exactly the two field errors
+  Pass  Turkish detail by default
+  GET http://127.0.0.1:8040/v1/orders?dealerOrderNo=PO-MVY8AJ1Z-NT01 [200 OK, 301B, 2ms]
+  Pass  No order was stored
+
+Sub-folder NT-02 · A2 Expired access token
+  POST http://127.0.0.1:8040/v1/orders [401 Unauthorized, 530B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  401 with code UNAUTHORIZED
+
+Sub-folder NT-03 · A3 Suspended dealer
+  POST http://127.0.0.1:8040/oauth2/token [200 OK, 403B, 2ms]
+  POST http://127.0.0.1:8040/v1/orders [403 Forbidden, 553B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  403 with code DEALER_SUSPENDED
+
+Sub-folder NT-04 · A4 Retry with the same key and body returns the original response
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 253ms]
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  202 Accepted
+  Pass  Same orderId as the first submission
+  GET http://127.0.0.1:8040/v1/orders?dealerOrderNo=PO-MVY8AJ1Z-NT04 [200 OK, 1.37kB, 2ms]
+  Pass  Only one order exists
+
+Sub-folder NT-05 · A5 Same key with a different body
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 259ms]
+  POST http://127.0.0.1:8040/v1/orders [422 Unprocessable Content, 656B, 3ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  422 with code IDEMPOTENCY_KEY_REUSED
+
+Sub-folder NT-06 · A6 Dealer order number already used
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 253ms]
+  POST http://127.0.0.1:8040/v1/orders [409 Conflict, 649B, 259ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  409 with code DUPLICATE_DEALER_ORDER_NO
+
+Sub-folder NT-07 · A6 A rejected dealer order number may be reused
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 255ms]
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-000207 [200 OK, 1.23kB, 3ms]
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 258ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  First order was REJECTED
+  Pass  202 Accepted
+  Pass  A new orderId
+
+Sub-folder NT-08 · A7 Two identical requests at the same time
+  POST http://127.0.0.1:8040/v1/orders   POST http://127.0.0.1:8040/v1/orders [409 Conflict, 654B, 2ms]
+[202 Accepted, 509B, 257ms]
+  GET http://127.0.0.1:8040/v1/orders?dealerOrderNo=PO-MVY8AJ1Z-NT08 [200 OK, 1.37kB, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  One 202 and one 409
+  Pass  409 is REQUEST_IN_PROGRESS with Retry-After
+  Pass  Exactly one order was created
+
+Sub-folder NT-09 · A8 Inactive SKU is rejected by the business rules
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 256ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  202 Accepted
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-000210 [200 OK, 1.23kB, 2ms]
+  Pass  REJECTED with reason INVALID_SKU by the system
+  Pass  Approved quantity is 0
+
+Sub-folder NT-10 · A8 Quantity below the minimum order quantity
+  POST http://127.0.0.1:8040/v1/orders [202 Accepted, 509B, 259ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  202 Accepted
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-000211 [200 OK, 1.21kB, 2ms]
+  Pass  REJECTED with reason BELOW_MOQ
+
+Sub-folder NT-11 · A11 More than 200 lines
+  POST http://127.0.0.1:8040/v1/orders [400 Bad Request, 723B, 260ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code VALIDATION_FAILED
+  Pass  Field error TOO_MANY_LINES on lines
+
+Sub-folder NT-12 · A11 Body over 256 KB
+  POST http://127.0.0.1:8040/v1/orders [413 Content Too Large, 620B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  413 with code PAYLOAD_TOO_LARGE
+
+Sub-folder NT-13 · F5 Unknown field on a line
+  POST http://127.0.0.1:8040/v1/orders [400 Bad Request, 726B, 258ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code VALIDATION_FAILED
+  Pass  Field error UNKNOWN_FIELD on lines[0].price
+
+Sub-folder NT-14 · A1 Missing Idempotency-Key
+  POST http://127.0.0.1:8040/v1/orders [400 Bad Request, 626B, 2ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code MISSING_IDEMPOTENCY_KEY
+
+Sub-folder NT-15 · A1 Idempotency-Key is not a UUID
+  POST http://127.0.0.1:8040/v1/orders [400 Bad Request, 627B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code INVALID_IDEMPOTENCY_KEY
+
+Sub-folder NT-16 · B1 Stock rate limit
+  POST http://127.0.0.1:8040/oauth2/token [200 OK, 403B, 1ms]
+  GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117   GET http://127.0.0.1:8040/v1/stock?sku=200117 [200 OK, 672B, 16ms]
+[200 OK, 672B, 17ms]
+[200 OK, 672B, 19ms]
+[200 OK, 672B, 20ms]
+[200 OK, 672B, 20ms]
+[200 OK, 672B, 21ms]
+[200 OK, 672B, 17ms]
+[200 OK, 672B, 21ms]
+[200 OK, 672B, 24ms]
+[200 OK, 672B, 21ms]
+[200 OK, 672B, 21ms]
+[200 OK, 672B, 25ms]
+[200 OK, 672B, 26ms]
+[200 OK, 672B, 26ms]
+[200 OK, 672B, 22ms]
+[200 OK, 672B, 23ms]
+[200 OK, 672B, 27ms]
+[200 OK, 672B, 23ms]
+[200 OK, 672B, 23ms]
+[200 OK, 672B, 16ms]
+[200 OK, 672B, 28ms]
+[200 OK, 672B, 28ms]
+[200 OK, 672B, 27ms]
+[200 OK, 672B, 27ms]
+[200 OK, 672B, 26ms]
+[200 OK, 672B, 31ms]
+[200 OK, 672B, 30ms]
+[200 OK, 672B, 30ms]
+[200 OK, 671B, 33ms]
+[200 OK, 672B, 32ms]
+[200 OK, 672B, 31ms]
+[200 OK, 671B, 33ms]
+[200 OK, 672B, 37ms]
+[200 OK, 671B, 32ms]
+[200 OK, 672B, 36ms]
+[200 OK, 672B, 36ms]
+[200 OK, 672B, 36ms]
+[200 OK, 672B, 36ms]
+[200 OK, 672B, 36ms]
+[200 OK, 672B, 39ms]
+[200 OK, 672B, 38ms]
+[200 OK, 672B, 42ms]
+[200 OK, 672B, 28ms]
+[200 OK, 671B, 39ms]
+[200 OK, 671B, 43ms]
+[200 OK, 671B, 41ms]
+[200 OK, 671B, 41ms]
+[200 OK, 672B, 43ms]
+[200 OK, 672B, 43ms]
+[200 OK, 672B, 47ms]
+[200 OK, 672B, 44ms]
+[200 OK, 672B, 44ms]
+[200 OK, 671B, 34ms]
+[200 OK, 671B, 36ms]
+[200 OK, 672B, 47ms]
+[200 OK, 672B, 50ms]
+[200 OK, 672B, 50ms]
+[200 OK, 672B, 51ms]
+[200 OK, 672B, 52ms]
+[200 OK, 671B, 49ms]
+  GET http://127.0.0.1:8040/v1/stock?sku=200117 [429 Too Many Requests, 662B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  The first 60 queries were answered
+  Pass  429 with code RATE_LIMIT_EXCEEDED
+  Pass  Retry-After and rate limit headers
+
+Sub-folder NT-17 · B3 Unknown SKU in a stock query
+  GET http://127.0.0.1:8040/v1/stock?sku=100234,999999,200117 [200 OK, 1.12kB, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  200 OK
+  Pass  Matches the StockResponse schema
+  Pass  Statuses OK, UNKNOWN, OK in request order
+
+Sub-folder NT-18 · B1 More than 50 SKUs
+  GET http://127.0.0.1:8040/v1/stock?sku=800000,800001,800002,800003,800004,800005,800006,800007,800008,800009,800010,800011,800012,800013,800014,800015,800016,800017,800018,800019,800020,800021,800022,800023,800024,800025,800026,800027,800028,800029,800030,800031,800032,800033,800034,800035,800036,800037,800038,800039,800040,800041,800042,800043,800044,800045,800046,800047,800048,800049,800050 [400 Bad Request, 719B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code VALIDATION_FAILED
+  Pass  Field error TOO_MANY_SKUS
+
+Sub-folder NT-19 · Another dealer's order is not visible
+  POST http://127.0.0.1:8040/oauth2/token [200 OK, 403B, 1ms]
+  GET http://127.0.0.1:8040/v1/orders/VO-2027-000123 [403 Forbidden, 612B, 0µs]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  403 with code FORBIDDEN_RESOURCE
+
+Sub-folder NT-20 · Unknown order id
+  GET http://127.0.0.1:8040/v1/orders/VO-2026-999999 [404 Not Found, 579B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  404 with code NOT_FOUND
+
+Sub-folder NT-27 · Acknowledge before the invoice is delivered
+  POST http://127.0.0.1:8040/v1/invoices/2b6e1f0a-5c3d-4e7f-8a9b-0c1d2e3f4a5b/acknowledge [409 Conflict, 652B, 1ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 1000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  409 with code INVALID_STATE
+
+Sub-folder NT-28 · Error messages follow Accept-Language
+  POST http://127.0.0.1:8040/v1/orders [400 Bad Request, 716B, 258ms]
+  Pass  [common] X-Request-Id header is present
+  Pass  [common] Response time under 2000 ms (NFR-PERF)
+  Pass  [common] Error uses application/problem+json
+  Pass  [common] Error body matches the Problem schema
+  Pass  400 with code VALIDATION_FAILED
+  Pass  English detail and message
+
+Folder 03 Integrator SOAP
+Sub-folder S-01 · CheckUser, registered dealer
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [200 OK, 1.17kB, 4ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  200 OK
+  Pass  Registered, with the PK alias used for sending
+
+Sub-folder S-02 · CheckUser, unregistered tax number
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [200 OK, 567B, 2ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  200 OK
+  Pass  Not registered
+
+Sub-folder S-03 · SendInvoice with a hash that does not match
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [500 Internal Server Error, 827B, 1ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  500 with a SOAP Fault
+  Pass  ServiceFault code 2002
+
+Sub-folder S-04 · SendInvoice
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [200 OK, 715B, 2ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  200 OK
+  Pass  QUEUED with a receipt id for the same ETTN
+
+Sub-folder S-05 · SendInvoice again with the same ETTN
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [500 Internal Server Error, 866B, 2ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  500 with a SOAP Fault
+  Pass  ServiceFault code 2005 naming the original receipt
+
+Sub-folder S-06 · GetInvoiceStatus, first poll
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [200 OK, 882B, 1ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  200 OK
+  Pass  SENT with state code 1200
+
+Sub-folder S-07 · GetInvoiceStatus, second poll
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [200 OK, 873B, 1ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  200 OK
+  Pass  DELIVERED with state code 1300
+
+Sub-folder S-08 · Wrong integrator credentials
+  POST http://127.0.0.1:8040/kopru/einvoice/v1 [500 Internal Server Error, 873B, 1ms]
+  -
+  | `Using "xml2Json" is deprecated. Use "require('xml2js'
+  | )" instead.`
+  -
+  Pass  Response is text/xml
+  Pass  500 with a SOAP Fault
+  Pass  ServiceFault code 1000
+
+------------------------------------------------------------------
+|                         |          executed |           failed |
+--------------------------+-------------------+-------------------
+|              iterations |                 1 |                0 |
+--------------------------+-------------------+-------------------
+|                requests |               122 |                0 |
+--------------------------+-------------------+-------------------
+|            test-scripts |                92 |                0 |
+--------------------------+-------------------+-------------------
+|      prerequest-scripts |                57 |                0 |
+--------------------------+-------------------+-------------------
+|              assertions |               232 |                0 |
+------------------------------------------------------------------
+| total run duration: 5.6s                                       |
+------------------------------------------------------------------
+| total data received: 55.49kB (approx)                          |
+------------------------------------------------------------------
+| average response time: 50ms [min: 1ms, max: 260ms, s.d.: 82ms] |
+------------------------------------------------------------------

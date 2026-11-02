@@ -60,6 +60,7 @@ Faults are SOAP 1.1 Faults (HTTP 500) with a `ServiceFault` detail carrying `cod
 | 2005 | `soapenv:Client` | ETTN already received; message carries the original receipt id | `INV_DUPLICATE_ETTN` | Treat as accepted, continue polling (E4) |
 | 3000 | `soapenv:Client` | Receiver is not a registered e-Invoice user | `INV_VKN_NOT_REGISTERED` | `HELD`, task for sales support (E2) |
 | 3001 | `soapenv:Client` | Receiver alias not found | `INV_SOAP_FAULT` | Re-run `CheckUser`, update the alias, resend |
+| 4004 | `soapenv:Client` | ETTN not found on a status query | `INV_SOAP_FAULT` | Check the ETTN against the send log, alert the integration team |
 | 5000 | `soapenv:Server` | Integrator internal error | `INV_INTEGRATOR_UNREACHABLE` | Retry every 5 minutes, alert after 30 minutes (E4) |
 
 ## UBL-TR sample

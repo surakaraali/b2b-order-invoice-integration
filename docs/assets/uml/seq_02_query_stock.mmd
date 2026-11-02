@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant D as Dealer ERP or portal
+    participant API as Integration API
+    participant C as Stock cache
+    participant ERP as Vektör ERP
+
+    D->>API: GET /stock with one or more SKUs
+    API->>API: Authenticate, check rate limit of 60 requests per minute
+    alt Rate limit exceeded
+        API-->>D: 429 Too Many Requests with Retry-After
+    else Within the limit
+        API->>C: Look up SKUs
+        alt Cached and younger than 5 minutes
+            C-->>API: Sellable stock per warehouse
+        else Not cached or older than 5 minutes
+            API->>ERP: Read on-hand, reserved and expected receipts per warehouse
+            ERP-->>API: Quantities
+            API->>C: Store for 5 minutes
+        end
+        API-->>D: 200 OK, per SKU sellable quantity per warehouse, unit, expected receipt date, unknown SKUs flagged
+    end

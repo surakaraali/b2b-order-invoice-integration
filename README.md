@@ -1,26 +1,35 @@
 # B2B Order, Stock and Invoice Integration Analysis
 
-**Live site: coming soon** (GitHub Pages, served from `docs/`)
+**Live site: [surakaraali.github.io/b2b-order-invoice-integration](https://surakaraali.github.io/b2b-order-invoice-integration/)** · [API explorer](https://surakaraali.github.io/b2b-order-invoice-integration/api.html)
 
 By **Sura Karaali**, [LinkedIn](https://www.linkedin.com/in/surakaraali/)
 
 A business and technical analysis of a B2B integration between an electronics distributor and the ERP systems of its dealers. It answers the question an integration team asks before building anything: **what has to flow between the systems, in which format, under which rules, and how do we know it worked?**
 
-The project is a complete analysis package, not an implementation: requirements, process models, UML, an API specification, a Postman test collection, field mappings, error handling rules, reconciliation SQL and an Agile backlog. Everything is presented on a one-page report site, available in **English and Turkish**.
+The project is a complete analysis package, not an implementation: requirements, process models, UML, an API specification, a SOAP contract with a schema-valid e-invoice, a Postman test collection, field mappings, error handling rules, reconciliation SQL on synthetic data, an Agile backlog and wireframes. Everything is presented on a one-page report site in **English and Turkish**; share a direct link such as [`?lang=tr`](https://surakaraali.github.io/b2b-order-invoice-integration/?lang=tr).
+
+> Vektör Elektronik, its dealers and the e-invoice integrator Köprü e-Belge are fictional. The data is synthetic.
 
 ---
 
-## Scope
+## The case in one paragraph
 
-Three flows are in scope for this version:
+Vektör Elektronik distributes consumer electronics to about 120 dealers. Today dealers e-mail Excel orders, sales support keys them into the ERP (about 25 minutes per order), stock is asked by phone (about 60 calls a day) and invoices go out as PDF files that dealers type in again (about 45 reconciliation mismatches a month). The target process: dealers' ERPs, or a portal for small dealers, submit orders and query stock through a REST API; clean orders are approved by business rules in seconds and exceptions go to a sales representative; every shipment is invoiced as e-Fatura through a private integrator over SOAP, and the dealer is notified with the invoice's ETTN so its system can match it automatically.
 
-| Flow | Direction | Protocol | Standard |
-|---|---|---|---|
-| Order | Dealer ERP → Distributor | REST | OpenAPI 3 |
-| Stock inquiry | Dealer ERP → Distributor | REST | OpenAPI 3 |
-| Invoice | Distributor → e-Invoice integrator → Dealer | SOAP | UBL-TR (GİB e-Fatura) |
+## Results at a glance
 
-Returns and cancellations are out of scope for this version.
+Measured with SQL on 13 weeks of synthetic data after go-live (5 April to 3 July 2027, 3,306 orders), last four weeks against the targets in the BRD:
+
+| Goal | Result | Status |
+|---|---|---|
+| G1 Order lines through the API or the portal | 74.5%; 76.3% in week 13, up from 8.5% in week 1 | On track, target date October 2027 |
+| G2 Orders corrected after entry | 1.02% overall, 0.28% for integrated orders | Met for integrated orders only |
+| G3 Time to the first order status | 39 seconds for 95% of orders; 86.6% of approvals within 4 business hours | Met for automatic decisions |
+| G4 Stock questions by phone | 29.1 a day, down from about 60 | Not met |
+| G5 Invoice in the dealer's inbox | 99.6% on the day of shipment, median 13 minutes | Met |
+| G6 Reconciliation mismatches | 1 in June | Met |
+
+Two outages, one in the ERP and one at the integrator, delayed work by up to two hours without losing an order or an invoice. The daily exception report for Monday 5 July lists 14 lines in five groups. The three invoices that came close to the legal 7-day limit were all late because the warehouse confirmed the shipment days after the carrier pickup.
 
 ## Deliverables
 
@@ -36,43 +45,68 @@ Returns and cancellations are out of scope for this version.
 | e-Invoice SOAP contract (WSDL) and sample UBL-TR messages | `api/soap/` | Done |
 | Postman collection with tests, sandbox simulator and test report | `api/postman/` | Done |
 | Reconciliation and KPI SQL on synthetic integration data (DuckDB) | `data/`, `sql/`, `scripts/` | Done |
-| Product backlog, sprint plan, JIRA import and Confluence pages; screenshots | `agile/` | Partly done: screenshots pending |
-| Dealer portal wireframes (Figma) | `design/wireframes/` | Planned |
-| One-page report site (EN/TR) | `docs/` | Planned |
+| Product backlog, sprint plan, JIRA import and Confluence pages | `agile/` | Done; JIRA and Confluence screenshots still to be added |
+| Dealer portal wireframes (draw.io, PNG, SVG for Figma) | `design/wireframes/` | Done |
+| One-page report site (EN/TR) and API explorer | `docs/` | Done |
 
 ## How it works
 
-- **Documents** are Markdown files under `analysis/`, written in the order a real project would produce them.
-- **Diagrams**: UML diagrams are Mermaid text files under `diagrams/uml/`, rendered directly by GitHub. BPMN diagrams are draw.io files under `diagrams/bpmn/` with PNG exports.
-- **API contracts**: the REST side is an OpenAPI 3 file under `api/openapi/`; the SOAP side is a WSDL with sample UBL-TR XML under `api/soap/`. The Postman collection under `api/postman/` exercises both.
-- **Data and SQL**: `data/generate_data.py` creates 13 weeks of synthetic orders, invoices and integration logs with problems planted at known rates. `sql/` loads them into DuckDB and produces the daily exception report, the six BRD goal measures and an operational view. `scripts/run_sql.py` runs the queries and writes the results as JSON into `docs/data/` for the site. No build step.
-- **Site**: `docs/` is plain HTML, CSS and JavaScript with Chart.js, the same approach as the [Telco Customer Churn Analysis](https://github.com/surakaraali/telco-churn-analysis) project.
+- **Documents** are Markdown files under `analysis/`, written in the order a real project would produce them; each one builds on the one before.
+- **Diagrams**: BPMN diagrams, the use case diagram and the wireframes are draw.io files with PNG exports. Sequence and state diagrams are Mermaid text files under `diagrams/uml/`, rendered directly by GitHub and on the site.
+- **API contracts**: the REST side is an OpenAPI 3.1 file under `api/openapi/`; the SOAP side is a WSDL with sample envelopes and a UBL-TR invoice under `api/soap/` that validates against the official GİB UBL-TR 1.2.1 schema.
+- **Tests**: the Postman collection under `api/postman/` covers the happy path, the negative tests of the error scenarios and the SOAP calls. It runs with Newman against `simulator/sandbox_simulator.py`, a standard library Python test double of the dealer API and the integrator.
+- **Data and SQL**: `data/generate_data.py` creates 13 weeks of synthetic orders, invoices and integration logs with problems planted at known rates. `sql/` loads them into DuckDB and produces the daily exception report, the six BRD goal measures and an operational view. `scripts/run_sql.py` runs the queries and writes the results as JSON into `docs/data/` for the site.
+- **Site**: `docs/` is plain HTML, CSS and JavaScript with Chart.js, the same approach as the [Telco Customer Churn Analysis](https://github.com/surakaraali/telco-churn-analysis) project. `scripts/sync_site_assets.py` copies the diagrams, wireframes and the OpenAPI file into `docs/assets/`, because GitHub Pages publishes only `docs/`. No build step.
+
+## Running it locally
+
+```bash
+python3 -m venv .venv
+```
+
+```bash
+.venv/bin/pip install -r requirements.txt
+```
+
+```bash
+.venv/bin/python scripts/run_sql.py
+```
+
+```bash
+python3 scripts/sync_site_assets.py
+```
+
+```bash
+python3 -m http.server 8001 -d docs
+```
+
+To run the API tests, start `python3 api/postman/simulator/sandbox_simulator.py` and follow `api/postman/README.md`.
 
 ## Repository layout
 
 ```
 b2b-order-invoice-integration/
 ├── README.md
-├── docs/                 # report site (GitHub Pages)
-│   ├── assets/           # diagram exports, screenshots
-│   └── data/             # JSON written by scripts/run_sql.py
+├── docs/                 # report site (GitHub Pages): index.html, api.html, style.css, app.js, i18n.js
+│   ├── assets/           # copies of diagrams, wireframes and the OpenAPI file
+│   └── data/             # results.json (SQL) and plan.json (backlog)
 ├── analysis/             # BRD, process, use cases, mapping, errors, NFR
 ├── diagrams/
 │   ├── bpmn/             # .drawio + .png
-│   └── uml/              # .mmd (Mermaid)
+│   └── uml/              # use case diagram (.drawio + .png), sequence and state diagrams (.mmd)
 ├── api/
 │   ├── openapi/          # dealer API (OpenAPI 3.1)
-│   ├── soap/             # e-Invoice WSDL + sample UBL-TR XML
+│   ├── soap/             # e-Invoice WSDL, sample envelopes, UBL-TR invoice
 │   └── postman/          # collection, environments, simulator, test report
 ├── data/                 # generate_data.py + raw/*.csv (synthetic, 13 weeks)
-├── sql/                  # load, data quality, exception report, KPIs
-├── scripts/              # run_sql.py (DuckDB → docs/data)
-├── requirements.txt      # duckdb
+├── sql/                  # load, data quality, exception report, KPIs, operations
+├── scripts/              # run_sql.py (DuckDB → docs/data), sync_site_assets.py
 ├── agile/                # backlog, sprint plan, JIRA CSV, Confluence pages, screenshots
-└── design/
-    └── wireframes/       # Figma exports + link
+├── design/
+│   └── wireframes/       # five portal and approval screens: .drawio, .png, .svg
+└── requirements.txt      # duckdb
 ```
 
 ## Status
 
-Started October 2026. Work in progress. The deliverables table above is updated as each piece is completed.
+Started October 2026. The analysis, the API contracts, the tests, the data and SQL, the plan, the wireframes and the site are complete. Still open: importing the backlog into JIRA Cloud and Confluence and adding the screenshots listed in `agile/README.md`.

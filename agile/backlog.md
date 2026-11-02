@@ -26,6 +26,7 @@ Dealers order, check stock and receive invoices system to system, so that Vektö
 - **Estimates** are story points on the Fibonacci scale (1, 2, 3, 5, 8, 13), relative to US-21, a simple read endpoint, as 3 points.
 - **Tests** name the Postman requests (HP, NT, S) or SQL files that verify the story, so every criterion can be traced to an executable check.
 - **Spikes** are time-boxed investigations that answer an open question.
+- **Wireframes** for the portal and approval stories are in [design/wireframes](../design/wireframes/README.md).
 - The sprint column is the plan in the [sprint plan](sprint_plan.md); it changes as the team learns.
 
 ## 3. Epics
@@ -323,7 +324,7 @@ As a sales representative, I want every credit or stock exception of my dealers 
 
 | Type | Priority | Points | Sprint | Traces to | Verified by |
 |---|---|---|---|---|---|
-| Story | Must | 5 | 3 | BR-05, RULE-08, UC-04 | HP-09, HP-10 |
+| Story | Must | 5 | 3 | BR-05, RULE-08, UC-04, wireframe 05 | HP-09, HP-10 |
 
 ```gherkin
 Scenario: A task is created
@@ -339,7 +340,7 @@ As a sales representative, I want to approve or reject a pending order with a re
 
 | Type | Priority | Points | Sprint | Traces to | Verified by |
 |---|---|---|---|---|---|
-| Story | Must | 5 | 3 | BR-05, RULE-09 | Sprint review demo |
+| Story | Must | 5 | 3 | BR-05, RULE-09, wireframe 05 | Sprint review demo |
 
 ```gherkin
 Scenario: Approve
@@ -553,7 +554,7 @@ As a small dealer without an ERP, I want to place an order in the portal and see
 
 | Type | Priority | Points | Sprint | Traces to | Verified by |
 |---|---|---|---|---|---|
-| Story | Should | 8 | 5 | BR-11, UC-01 A3 | Sprint review demo |
+| Story | Should | 8 | 5 | BR-11, UC-01 A3, wireframe 01 | Sprint review demo |
 
 ```gherkin
 Scenario: Order in the portal
@@ -569,7 +570,7 @@ As a small dealer without an ERP, I want to see my orders, their status and my i
 
 | Type | Priority | Points | Sprint | Traces to | Verified by |
 |---|---|---|---|---|---|
-| Story | Should | 5 | 5 | BR-11, UC-03 A2, UC-08 A2 | Sprint review demo |
+| Story | Should | 5 | 5 | BR-11, UC-03 A2, UC-08 A2, wireframes 02 to 04 | Sprint review demo |
 
 ```gherkin
 Scenario: Order list

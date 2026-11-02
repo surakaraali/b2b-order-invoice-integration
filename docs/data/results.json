@@ -154,14 +154,17 @@
   },
   "daily_exception_report": {
     "file": "sql/02_daily_exception_report.sql",
-    "sql": "-- Step 2: the daily exception report (UC-09, BRD section 7.6), as run on Monday 5 July 2027 at 07:00.\n-- Five groups of items that would otherwise stall silently. Each line names the order, invoice or dealer to act on.\n-- Group 1 reads \"without an invoice\" as \"no invoice accepted by the integrator\", so held and failed invoices are included.\n\nWITH p AS (SELECT * FROM report_params),\nreport_day AS (\n    SELECT c.working_day_index AS idx FROM calendar c, p WHERE c.day = p.report_date\n),\nprevious_working_day AS (\n    SELECT max(c.day) AS day FROM calendar c, p WHERE c.is_working_day AND c.day < p.report_date\n),\n-- 1. Shipped more than one working day ago, no invoice accepted by the integrator\ng1 AS (\n    SELECT '1 Shipped, invoice not sent'                          AS exception_group,\n           s.order_id                                             AS reference,\n           o.dealer_code,\n           CASE WHEN i.ettn IS NULL               THEN 'No invoice created in the ERP'\n                WHEN i.final_state = 'HELD'        THEN 'Invoice held: dealer tax number not on the GİB list'\n                WHEN i.final_state = 'SEND_FAILED' THEN 'Invoice rejected by the integrator, not yet resent'\n                ELSE 'Invoice created, not yet sent' END          AS detail,\n           s.confirmed_at                                         AS since\n    FROM shipments s\n    JOIN orders o USING (order_id)\n    LEFT JOIN invoices i USING (order_id)\n    JOIN calendar c ON c.day = CAST(s.confirmed_at AS DATE)\n    CROSS JOIN report_day r\n    WHERE s.confirmed_at IS NOT NULL\n      AND i.accepted_at IS NULL\n      AND r.idx - c.working_day_index > 1\n),\n-- 2. Sent to the integrator more than 24 hours ago, not delivered\ng2 AS (\n    SELECT '2 Sent, not delivered within 24 hours',\n           i.ettn,\n           i.dealer_code,\n           'Invoice ' || i.invoice_no || ' still ' || i.final_state || ' at Köprü e-Belge',\n           i.accepted_at\n    FROM invoices i, p\n    WHERE i.accepted_at IS NOT NULL\n      AND i.delivered_at IS NULL\n      AND i.accepted_at < p.as_of - INTERVAL 24 HOUR\n),\n-- 3. Delivered, not acknowledged within 5 working days, by dealers whose connector acknowledges invoices\ng3 AS (\n    SELECT '3 Delivered, not acknowledged in 5 working days',\n           i.ettn,\n           i.dealer_code,\n           'Invoice ' || i.invoice_no || ' for dealer order ' || o.dealer_order_no,\n           i.delivered_at\n    FROM invoices i\n    JOIN orders o USING (order_id)\n    JOIN dealers d ON d.dealer_code = i.dealer_code\n    LEFT JOIN acknowledgements a USING (ettn)\n    JOIN calendar c ON c.day = CAST(i.delivered_at AS DATE)\n    CROSS JOIN report_day r\n    WHERE i.delivered_at IS NOT NULL\n      AND a.ettn IS NULL\n      AND d.acknowledges_invoices\n      AND o.channel = 'API'\n      AND o.current_status <> 'CLOSED'           -- orders close automatically 30 days after INVOICED\n      AND r.idx - c.working_day_index > 5\n),\n-- 4. Dealers whose webhook endpoint fails: events exhausted in the last 7 days and the latest attempt still failing\nlast_attempt AS (\n    SELECT dealer_code, arg_max(result, attempted_at) AS last_result\n    FROM webhook_deliveries GROUP BY dealer_code\n),\nexhausted AS (\n    SELECT w.dealer_code, count(*) AS events, min(w.attempted_at) AS first_exhausted_at\n    FROM webhook_deliveries w, p\n    WHERE w.result = 'EXHAUSTED' AND w.attempted_at >= p.as_of - INTERVAL 7 DAY\n    GROUP BY w.dealer_code\n),\ng4 AS (\n    SELECT '4 Webhook endpoint failing',\n           e.dealer_code,\n           e.dealer_code,\n           e.events || ' events failed all 6 attempts; latest attempt ' || l.last_result,\n           e.first_exhausted_at\n    FROM exhausted e JOIN last_attempt l USING (dealer_code)\n    WHERE l.last_result <> 'DELIVERED'\n),\n-- 5. Shipment confirmation late or missing: confirmed yesterday more than 24 hours after pickup, or not confirmed at all\ng5 AS (\n    SELECT '5 Shipment confirmation late or missing',\n           s.order_id,\n           o.dealer_code,\n           CASE WHEN s.confirmed_at IS NULL THEN 'Picked up by the carrier, not confirmed in the ERP'\n                ELSE 'Confirmed ' || round(date_diff('minute', s.carrier_pickup_at, s.confirmed_at) / 60.0, 1)\n                     || ' hours after carrier pickup' END,\n           s.carrier_pickup_at\n    FROM shipments s\n    JOIN orders o USING (order_id)\n    CROSS JOIN p\n    CROSS JOIN previous_working_day y\n    WHERE (s.confirmed_at IS NULL AND s.carrier_pickup_at < p.as_of - INTERVAL 24 HOUR)\n       OR (CAST(s.confirmed_at AS DATE) = y.day AND s.confirmed_at - s.carrier_pickup_at > INTERVAL 24 HOUR)\n),\nall_groups AS (\n    SELECT * FROM g1 UNION ALL SELECT * FROM g2 UNION ALL SELECT * FROM g3\n    UNION ALL SELECT * FROM g4 UNION ALL SELECT * FROM g5\n)\nSELECT a.exception_group, a.reference, a.dealer_code, a.detail,\n       a.since, date_diff('hour', a.since, p.as_of) AS age_hours\nFROM all_groups a, p\nORDER BY a.exception_group, a.since;",
+    "sql": "-- Step 2: the daily exception report (UC-09, BRD section 7.6), as run on Monday 5 July 2027 at 07:00.\n-- Five groups of items that would otherwise stall silently. Each line names the order, invoice or dealer to act on.\n-- issue_code, document_no and quantity let the report site build the text in Turkish or English.\n-- Group 1 reads \"without an invoice\" as \"no invoice accepted by the integrator\", so held and failed invoices are included.\n\nWITH p AS (SELECT * FROM report_params),\nreport_day AS (\n    SELECT c.working_day_index AS idx FROM calendar c, p WHERE c.day = p.report_date\n),\nprevious_working_day AS (\n    SELECT max(c.day) AS day FROM calendar c, p WHERE c.is_working_day AND c.day < p.report_date\n),\n-- 1. Shipped more than one working day ago, no invoice accepted by the integrator\ng1 AS (\n    SELECT '1 Shipped, invoice not sent'                          AS exception_group,\n           s.order_id                                             AS reference,\n           o.dealer_code,\n           CASE WHEN i.ettn IS NULL               THEN 'NO_INVOICE'\n                WHEN i.final_state = 'HELD'        THEN 'HELD'\n                WHEN i.final_state = 'SEND_FAILED' THEN 'SEND_FAILED'\n                ELSE 'NOT_SENT' END                               AS issue_code,\n           o.dealer_order_no                                      AS document_no,\n           NULL::INTEGER                                          AS quantity,\n           CASE WHEN i.ettn IS NULL               THEN 'No invoice created in the ERP'\n                WHEN i.final_state = 'HELD'        THEN 'Invoice held: dealer tax number not on the GİB list'\n                WHEN i.final_state = 'SEND_FAILED' THEN 'Invoice rejected by the integrator, not yet resent'\n                ELSE 'Invoice created, not yet sent' END          AS detail,\n           s.confirmed_at                                         AS since\n    FROM shipments s\n    JOIN orders o USING (order_id)\n    LEFT JOIN invoices i USING (order_id)\n    JOIN calendar c ON c.day = CAST(s.confirmed_at AS DATE)\n    CROSS JOIN report_day r\n    WHERE s.confirmed_at IS NOT NULL\n      AND i.accepted_at IS NULL\n      AND r.idx - c.working_day_index > 1\n),\n-- 2. Sent to the integrator more than 24 hours ago, not delivered\ng2 AS (\n    SELECT '2 Sent, not delivered within 24 hours',\n           i.ettn,\n           i.dealer_code,\n           'AT_INTEGRATOR',\n           i.invoice_no,\n           NULL::INTEGER,\n           'Invoice ' || i.invoice_no || ' still ' || i.final_state || ' at Köprü e-Belge',\n           i.accepted_at\n    FROM invoices i, p\n    WHERE i.accepted_at IS NOT NULL\n      AND i.delivered_at IS NULL\n      AND i.accepted_at < p.as_of - INTERVAL 24 HOUR\n),\n-- 3. Delivered, not acknowledged within 5 working days, by dealers whose connector acknowledges invoices\ng3 AS (\n    SELECT '3 Delivered, not acknowledged in 5 working days',\n           i.ettn,\n           i.dealer_code,\n           'NOT_ACKNOWLEDGED',\n           i.invoice_no,\n           NULL::INTEGER,\n           'Invoice ' || i.invoice_no || ' for dealer order ' || o.dealer_order_no,\n           i.delivered_at\n    FROM invoices i\n    JOIN orders o USING (order_id)\n    JOIN dealers d ON d.dealer_code = i.dealer_code\n    LEFT JOIN acknowledgements a USING (ettn)\n    JOIN calendar c ON c.day = CAST(i.delivered_at AS DATE)\n    CROSS JOIN report_day r\n    WHERE i.delivered_at IS NOT NULL\n      AND a.ettn IS NULL\n      AND d.acknowledges_invoices\n      AND o.channel = 'API'\n      AND o.current_status <> 'CLOSED'           -- orders close automatically 30 days after INVOICED\n      AND r.idx - c.working_day_index > 5\n),\n-- 4. Dealers whose webhook endpoint fails: events exhausted in the last 7 days and the latest attempt still failing\nlast_attempt AS (\n    SELECT dealer_code, arg_max(result, attempted_at) AS last_result\n    FROM webhook_deliveries GROUP BY dealer_code\n),\nexhausted AS (\n    SELECT w.dealer_code, count(*) AS events, min(w.attempted_at) AS first_exhausted_at\n    FROM webhook_deliveries w, p\n    WHERE w.result = 'EXHAUSTED' AND w.attempted_at >= p.as_of - INTERVAL 7 DAY\n    GROUP BY w.dealer_code\n),\ng4 AS (\n    SELECT '4 Webhook endpoint failing',\n           e.dealer_code,\n           e.dealer_code,\n           'WEBHOOK_FAILING',\n           NULL,\n           e.events::INTEGER,\n           e.events || ' events failed all 6 attempts; latest attempt ' || l.last_result,\n           e.first_exhausted_at\n    FROM exhausted e JOIN last_attempt l USING (dealer_code)\n    WHERE l.last_result <> 'DELIVERED'\n),\n-- 5. Shipment confirmation late or missing: confirmed yesterday more than 24 hours after pickup, or not confirmed at all\ng5 AS (\n    SELECT '5 Shipment confirmation late or missing',\n           s.order_id,\n           o.dealer_code,\n           CASE WHEN s.confirmed_at IS NULL THEN 'NOT_CONFIRMED' ELSE 'LATE_CONFIRMATION' END,\n           o.dealer_order_no,\n           CASE WHEN s.confirmed_at IS NULL THEN NULL\n                ELSE date_diff('hour', s.carrier_pickup_at, s.confirmed_at)::INTEGER END,\n           CASE WHEN s.confirmed_at IS NULL THEN 'Picked up by the carrier, not confirmed in the ERP'\n                ELSE 'Confirmed ' || round(date_diff('minute', s.carrier_pickup_at, s.confirmed_at) / 60.0, 1)\n                     || ' hours after carrier pickup' END,\n           s.carrier_pickup_at\n    FROM shipments s\n    JOIN orders o USING (order_id)\n    CROSS JOIN p\n    CROSS JOIN previous_working_day y\n    WHERE (s.confirmed_at IS NULL AND s.carrier_pickup_at < p.as_of - INTERVAL 24 HOUR)\n       OR (CAST(s.confirmed_at AS DATE) = y.day AND s.confirmed_at - s.carrier_pickup_at > INTERVAL 24 HOUR)\n),\nall_groups AS (\n    SELECT * FROM g1 UNION ALL SELECT * FROM g2 UNION ALL SELECT * FROM g3\n    UNION ALL SELECT * FROM g4 UNION ALL SELECT * FROM g5\n)\nSELECT a.exception_group, a.reference, a.dealer_code, a.detail,\n       a.since, date_diff('hour', a.since, p.as_of) AS age_hours,\n       a.issue_code, a.document_no, a.quantity          -- structured fields for the report site\nFROM all_groups a, p\nORDER BY a.exception_group, a.since;",
     "columns": [
       "exception_group",
       "reference",
       "dealer_code",
       "detail",
       "since",
-      "age_hours"
+      "age_hours",
+      "issue_code",
+      "document_no",
+      "quantity"
     ],
     "rows": [
       {
@@ -170,7 +173,10 @@
         "dealer_code": "D00005",
         "detail": "No invoice created in the ERP",
         "since": "2027-07-01 15:04:00",
-        "age_hours": 88
+        "age_hours": 88,
+        "issue_code": "NO_INVOICE",
+        "document_no": "SIP-2027-00071",
+        "quantity": null
       },
       {
         "exception_group": "1 Shipped, invoice not sent",
@@ -178,7 +184,10 @@
         "dealer_code": "D00100",
         "detail": "No invoice created in the ERP",
         "since": "2027-07-02 15:40:00",
-        "age_hours": 64
+        "age_hours": 64,
+        "issue_code": "NO_INVOICE",
+        "document_no": "EM-100-00016",
+        "quantity": null
       },
       {
         "exception_group": "1 Shipped, invoice not sent",
@@ -186,7 +195,10 @@
         "dealer_code": "D00116",
         "detail": "No invoice created in the ERP",
         "since": "2027-07-02 16:04:00",
-        "age_hours": 63
+        "age_hours": 63,
+        "issue_code": "NO_INVOICE",
+        "document_no": "PO-2027-00090",
+        "quantity": null
       },
       {
         "exception_group": "2 Sent, not delivered within 24 hours",
@@ -194,7 +206,10 @@
         "dealer_code": "D00120",
         "detail": "Invoice VKT2027000004205 still AT_INTEGRATOR at Köprü e-Belge",
         "since": "2027-07-02 14:37:14",
-        "age_hours": 65
+        "age_hours": 65,
+        "issue_code": "AT_INTEGRATOR",
+        "document_no": "VKT2027000004205",
+        "quantity": null
       },
       {
         "exception_group": "2 Sent, not delivered within 24 hours",
@@ -202,7 +217,10 @@
         "dealer_code": "D00025",
         "detail": "Invoice VKT2027000004217 still AT_INTEGRATOR at Köprü e-Belge",
         "since": "2027-07-02 15:29:11",
-        "age_hours": 64
+        "age_hours": 64,
+        "issue_code": "AT_INTEGRATOR",
+        "document_no": "VKT2027000004217",
+        "quantity": null
       },
       {
         "exception_group": "3 Delivered, not acknowledged in 5 working days",
@@ -210,7 +228,10 @@
         "dealer_code": "D00104",
         "detail": "Invoice VKT2027000003157 for dealer order SIP-2027-00047",
         "since": "2027-06-05 14:51:44",
-        "age_hours": 713
+        "age_hours": 713,
+        "issue_code": "NOT_ACKNOWLEDGED",
+        "document_no": "VKT2027000003157",
+        "quantity": null
       },
       {
         "exception_group": "3 Delivered, not acknowledged in 5 working days",
@@ -218,7 +239,10 @@
         "dealer_code": "D00085",
         "detail": "Invoice VKT2027000003202 for dealer order SIP-2027-00033",
         "since": "2027-06-07 17:07:17",
-        "age_hours": 662
+        "age_hours": 662,
+        "issue_code": "NOT_ACKNOWLEDGED",
+        "document_no": "VKT2027000003202",
+        "quantity": null
       },
       {
         "exception_group": "3 Delivered, not acknowledged in 5 working days",
@@ -226,7 +250,10 @@
         "dealer_code": "D00044",
         "detail": "Invoice VKT2027000003367 for dealer order PO-2027-00042",
         "since": "2027-06-10 14:56:08",
-        "age_hours": 593
+        "age_hours": 593,
+        "issue_code": "NOT_ACKNOWLEDGED",
+        "document_no": "VKT2027000003367",
+        "quantity": null
       },
       {
         "exception_group": "3 Delivered, not acknowledged in 5 working days",
@@ -234,7 +261,10 @@
         "dealer_code": "D00116",
         "detail": "Invoice VKT2027000003419 for dealer order PO-2027-00066",
         "since": "2027-06-11 17:05:00",
-        "age_hours": 566
+        "age_hours": 566,
+        "issue_code": "NOT_ACKNOWLEDGED",
+        "document_no": "VKT2027000003419",
+        "quantity": null
       },
       {
         "exception_group": "3 Delivered, not acknowledged in 5 working days",
@@ -242,7 +272,10 @@
         "dealer_code": "D00041",
         "detail": "Invoice VKT2027000003872 for dealer order SIP-2027-00079",
         "since": "2027-06-23 14:22:58",
-        "age_hours": 281
+        "age_hours": 281,
+        "issue_code": "NOT_ACKNOWLEDGED",
+        "document_no": "VKT2027000003872",
+        "quantity": null
       },
       {
         "exception_group": "3 Delivered, not acknowledged in 5 working days",
@@ -250,7 +283,10 @@
         "dealer_code": "D00087",
         "detail": "Invoice VKT2027000004039 for dealer order PO-2027-00067",
         "since": "2027-06-28 15:06:11",
-        "age_hours": 160
+        "age_hours": 160,
+        "issue_code": "NOT_ACKNOWLEDGED",
+        "document_no": "VKT2027000004039",
+        "quantity": null
       },
       {
         "exception_group": "4 Webhook endpoint failing",
@@ -258,7 +294,10 @@
         "dealer_code": "D00087",
         "detail": "2 events failed all 6 attempts; latest attempt EXHAUSTED",
         "since": "2027-07-02 16:45:14",
-        "age_hours": 63
+        "age_hours": 63,
+        "issue_code": "WEBHOOK_FAILING",
+        "document_no": null,
+        "quantity": 2
       },
       {
         "exception_group": "5 Shipment confirmation late or missing",
@@ -266,7 +305,10 @@
         "dealer_code": "D00064",
         "detail": "Picked up by the carrier, not confirmed in the ERP",
         "since": "2027-07-03 15:40:00",
-        "age_hours": 40
+        "age_hours": 40,
+        "issue_code": "NOT_CONFIRMED",
+        "document_no": "EM-064-00029",
+        "quantity": null
       },
       {
         "exception_group": "5 Shipment confirmation late or missing",
@@ -274,7 +316,10 @@
         "dealer_code": "D00087",
         "detail": "Picked up by the carrier, not confirmed in the ERP",
         "since": "2027-07-03 15:50:00",
-        "age_hours": 40
+        "age_hours": 40,
+        "issue_code": "NOT_CONFIRMED",
+        "document_no": "PO-2027-00069",
+        "quantity": null
       }
     ]
   },
@@ -1141,17 +1186,17 @@
       },
       {
         "channel": "API",
-        "result_code": "UNAUTHORIZED",
-        "http_status": 401,
-        "field_error_code": "",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "FIELD_REQUIRED",
         "submissions": 9,
         "share_of_channel_pct": 0.8
       },
       {
         "channel": "API",
-        "result_code": "VALIDATION_FAILED",
-        "http_status": 400,
-        "field_error_code": "FIELD_REQUIRED",
+        "result_code": "UNAUTHORIZED",
+        "http_status": 401,
+        "field_error_code": "",
         "submissions": 9,
         "share_of_channel_pct": 0.8
       },
@@ -1189,17 +1234,17 @@
       },
       {
         "channel": "API",
-        "result_code": "VALIDATION_FAILED",
-        "http_status": 400,
-        "field_error_code": "DUPLICATE_LINE_SKU",
+        "result_code": "IDEMPOTENCY_KEY_REUSED",
+        "http_status": 422,
+        "field_error_code": "",
         "submissions": 2,
         "share_of_channel_pct": 0.18
       },
       {
         "channel": "API",
-        "result_code": "IDEMPOTENCY_KEY_REUSED",
-        "http_status": 422,
-        "field_error_code": "",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "DUPLICATE_LINE_SKU",
         "submissions": 2,
         "share_of_channel_pct": 0.18
       },
@@ -1383,14 +1428,17 @@
   },
   "kpi_scorecard": {
     "file": "sql/13_kpi_scorecard.sql",
-    "sql": "-- Step 13: scorecard of the six BRD goals over the last four weeks of the period (weeks 10 to 13, 7 June to 3 July).\n-- G1 has a six-month target date; the others apply from go-live. Status compares the result with the target.\n\nWITH p AS (SELECT * FROM report_params),\nrecent AS (\n    SELECT day FROM calendar WHERE period_week BETWEEN 10 AND 13\n),\nworking_days AS (\n    SELECT count(*) AS n FROM calendar WHERE period_week BETWEEN 10 AND 13 AND is_working_day\n),\ng1 AS (\n    SELECT round(100.0 * sum(line_count) FILTER (WHERE channel <> 'MANUAL') / sum(line_count), 1) AS v\n    FROM orders WHERE CAST(received_at AS DATE) IN (SELECT day FROM recent)\n),\ng2 AS (\n    SELECT round(100.0 * avg(corrected_after_entry::INTEGER), 2) AS v,\n           round(100.0 * avg(corrected_after_entry::INTEGER) FILTER (WHERE channel <> 'MANUAL'), 2) AS v_integrated\n    FROM orders WHERE CAST(received_at AS DATE) IN (SELECT day FROM recent)\n),\ng3 AS (\n    SELECT round(quantile_cont(date_diff('millisecond', r.occurred_at, d.occurred_at) / 1000.0, 0.95), 1) AS p95_seconds\n    FROM order_status_history d\n    JOIN order_status_history r ON r.order_id = d.order_id AND r.sequence = 1\n    WHERE d.sequence = 2 AND CAST(r.occurred_at AS DATE) IN (SELECT day FROM recent)\n),\ng3_tasks AS (\n    SELECT round(100.0 * avg((decided_at <= due_at)::INTEGER), 1) AS on_time_pct\n    FROM approval_tasks WHERE decided_at IS NOT NULL AND CAST(created_at AS DATE) IN (SELECT day FROM recent)\n),\ng4 AS (\n    SELECT round(sum(phone_stock_questions) / sum(working_days), 1) AS v\n    FROM support_tally_weekly WHERE week_start IN (SELECT day FROM recent)\n),\ng5 AS (\n    SELECT round(100.0 * avg((CAST(i.delivered_at AS DATE) = CAST(s.confirmed_at AS DATE))::INTEGER), 1) AS same_day_pct,\n           round(median(date_diff('minute', s.confirmed_at, i.delivered_at)) / 60.0, 2)            AS median_hours\n    FROM invoices i JOIN shipments s USING (order_id)\n    WHERE i.delivered_at IS NOT NULL AND CAST(s.confirmed_at AS DATE) IN (SELECT day FROM recent)\n),\ng6 AS (\n    SELECT count(*) AS v FROM acknowledgements\n    WHERE match_result = 'MISMATCH' AND strftime(acknowledged_at, '%Y-%m') = '2027-06'\n)\nSELECT 'G1' AS goal, 'Order lines received through the API or the portal' AS metric,\n       '0%' AS baseline, 'at least 80% by October 2027' AS target,\n       g1.v || '%' AS result,\n       CASE WHEN g1.v >= 80 THEN 'Met' ELSE 'On the way; target date not reached' END AS status\nFROM g1\nUNION ALL\nSELECT 'G2', 'Orders corrected after entry', '4%', 'below 0.5%',\n       g2.v || '% overall, ' || g2.v_integrated || '% for integrated orders',\n       CASE WHEN g2.v < 0.5 THEN 'Met' WHEN g2.v_integrated < 0.5 THEN 'Met for integrated orders only' ELSE 'Not met' END\nFROM g2\nUNION ALL\nSELECT 'G3', 'Time to first status; approvals within 4 business hours', 'about 1 working day',\n       'under 2 minutes; approvals within 4 business hours',\n       'p95 ' || g3.p95_seconds || ' s; ' || g3_tasks.on_time_pct || '% of approvals on time',\n       CASE WHEN g3.p95_seconds < 120 AND g3_tasks.on_time_pct >= 100 THEN 'Met'\n            WHEN g3.p95_seconds < 120 THEN 'Met for automatic decisions; approvals miss the 4-hour target'\n            ELSE 'Not met' END\nFROM g3, g3_tasks\nUNION ALL\nSELECT 'G4', 'Stock questions by phone per working day', 'about 60', 'below 6',\n       g4.v || ' a day', CASE WHEN g4.v < 6 THEN 'Met' ELSE 'Not met' END\nFROM g4\nUNION ALL\nSELECT 'G5', 'Invoice in the dealer''s inbox on the day of shipment', '1.5 working days', 'same day',\n       g5.same_day_pct || '% same day, median ' || g5.median_hours || ' hours',\n       CASE WHEN g5.same_day_pct >= 95 THEN 'Met' ELSE 'Not met' END\nFROM g5\nUNION ALL\nSELECT 'G6', 'Reconciliation mismatches in June 2027', 'about 45 a month', 'below 5 a month',\n       g6.v || ' in June', CASE WHEN g6.v < 5 THEN 'Met' ELSE 'Not met' END\nFROM g6;",
+    "sql": "-- Step 13: scorecard of the six BRD goals over the last four weeks of the period (weeks 10 to 13, 7 June to 3 July).\n-- status_code and value_1, value_2 are the same results as numbers, for the report site.\n-- G1 has a six-month target date; the others apply from go-live. Status compares the result with the target.\n\nWITH p AS (SELECT * FROM report_params),\nrecent AS (\n    SELECT day FROM calendar WHERE period_week BETWEEN 10 AND 13\n),\nworking_days AS (\n    SELECT count(*) AS n FROM calendar WHERE period_week BETWEEN 10 AND 13 AND is_working_day\n),\ng1 AS (\n    SELECT round(100.0 * sum(line_count) FILTER (WHERE channel <> 'MANUAL') / sum(line_count), 1) AS v\n    FROM orders WHERE CAST(received_at AS DATE) IN (SELECT day FROM recent)\n),\ng2 AS (\n    SELECT round(100.0 * avg(corrected_after_entry::INTEGER), 2) AS v,\n           round(100.0 * avg(corrected_after_entry::INTEGER) FILTER (WHERE channel <> 'MANUAL'), 2) AS v_integrated\n    FROM orders WHERE CAST(received_at AS DATE) IN (SELECT day FROM recent)\n),\ng3 AS (\n    SELECT round(quantile_cont(date_diff('millisecond', r.occurred_at, d.occurred_at) / 1000.0, 0.95), 1) AS p95_seconds\n    FROM order_status_history d\n    JOIN order_status_history r ON r.order_id = d.order_id AND r.sequence = 1\n    WHERE d.sequence = 2 AND CAST(r.occurred_at AS DATE) IN (SELECT day FROM recent)\n),\ng3_tasks AS (\n    SELECT round(100.0 * avg((decided_at <= due_at)::INTEGER), 1) AS on_time_pct\n    FROM approval_tasks WHERE decided_at IS NOT NULL AND CAST(created_at AS DATE) IN (SELECT day FROM recent)\n),\ng4 AS (\n    SELECT round(sum(phone_stock_questions) / sum(working_days), 1) AS v\n    FROM support_tally_weekly WHERE week_start IN (SELECT day FROM recent)\n),\ng5 AS (\n    SELECT round(100.0 * avg((CAST(i.delivered_at AS DATE) = CAST(s.confirmed_at AS DATE))::INTEGER), 1) AS same_day_pct,\n           round(median(date_diff('minute', s.confirmed_at, i.delivered_at)) / 60.0, 2)            AS median_hours\n    FROM invoices i JOIN shipments s USING (order_id)\n    WHERE i.delivered_at IS NOT NULL AND CAST(s.confirmed_at AS DATE) IN (SELECT day FROM recent)\n),\ng6 AS (\n    SELECT count(*) AS v FROM acknowledgements\n    WHERE match_result = 'MISMATCH' AND strftime(acknowledged_at, '%Y-%m') = '2027-06'\n)\nSELECT 'G1' AS goal, 'Order lines received through the API or the portal' AS metric,\n       '0%' AS baseline, 'at least 80% by October 2027' AS target,\n       g1.v || '%' AS result,\n       CASE WHEN g1.v >= 80 THEN 'Met' ELSE 'On the way; target date not reached' END AS status,\n       CASE WHEN g1.v >= 80 THEN 'MET' ELSE 'ON_TRACK' END AS status_code,\n       g1.v AS value_1, NULL::DOUBLE AS value_2\nFROM g1\nUNION ALL\nSELECT 'G2', 'Orders corrected after entry', '4%', 'below 0.5%',\n       g2.v || '% overall, ' || g2.v_integrated || '% for integrated orders',\n       CASE WHEN g2.v < 0.5 THEN 'Met' WHEN g2.v_integrated < 0.5 THEN 'Met for integrated orders only' ELSE 'Not met' END,\n       CASE WHEN g2.v < 0.5 THEN 'MET' WHEN g2.v_integrated < 0.5 THEN 'PARTLY_MET' ELSE 'NOT_MET' END,\n       g2.v, g2.v_integrated\nFROM g2\nUNION ALL\nSELECT 'G3', 'Time to first status; approvals within 4 business hours', 'about 1 working day',\n       'under 2 minutes; approvals within 4 business hours',\n       'p95 ' || g3.p95_seconds || ' s; ' || g3_tasks.on_time_pct || '% of approvals on time',\n       CASE WHEN g3.p95_seconds < 120 AND g3_tasks.on_time_pct >= 100 THEN 'Met'\n            WHEN g3.p95_seconds < 120 THEN 'Met for automatic decisions; approvals miss the 4-hour target'\n            ELSE 'Not met' END,\n       CASE WHEN g3.p95_seconds < 120 AND g3_tasks.on_time_pct >= 100 THEN 'MET'\n            WHEN g3.p95_seconds < 120 THEN 'PARTLY_MET' ELSE 'NOT_MET' END,\n       g3.p95_seconds, g3_tasks.on_time_pct\nFROM g3, g3_tasks\nUNION ALL\nSELECT 'G4', 'Stock questions by phone per working day', 'about 60', 'below 6',\n       g4.v || ' a day', CASE WHEN g4.v < 6 THEN 'Met' ELSE 'Not met' END,\n       CASE WHEN g4.v < 6 THEN 'MET' ELSE 'NOT_MET' END, g4.v, NULL\nFROM g4\nUNION ALL\nSELECT 'G5', 'Invoice in the dealer''s inbox on the day of shipment', '1.5 working days', 'same day',\n       g5.same_day_pct || '% same day, median ' || g5.median_hours || ' hours',\n       CASE WHEN g5.same_day_pct >= 95 THEN 'Met' ELSE 'Not met' END,\n       CASE WHEN g5.same_day_pct >= 95 THEN 'MET' ELSE 'NOT_MET' END, g5.same_day_pct, g5.median_hours\nFROM g5\nUNION ALL\nSELECT 'G6', 'Reconciliation mismatches in June 2027', 'about 45 a month', 'below 5 a month',\n       g6.v || ' in June', CASE WHEN g6.v < 5 THEN 'Met' ELSE 'Not met' END,\n       CASE WHEN g6.v < 5 THEN 'MET' ELSE 'NOT_MET' END, g6.v, NULL\nFROM g6;",
     "columns": [
       "goal",
       "metric",
       "baseline",
       "target",
       "result",
-      "status"
+      "status",
+      "status_code",
+      "value_1",
+      "value_2"
     ],
     "rows": [
       {
@@ -1399,7 +1447,10 @@
         "baseline": "0%",
         "target": "at least 80% by October 2027",
         "result": "74.5%",
-        "status": "On the way; target date not reached"
+        "status": "On the way; target date not reached",
+        "status_code": "ON_TRACK",
+        "value_1": 74.5,
+        "value_2": null
       },
       {
         "goal": "G2",
@@ -1407,7 +1458,10 @@
         "baseline": "4%",
         "target": "below 0.5%",
         "result": "1.02% overall, 0.28% for integrated orders",
-        "status": "Met for integrated orders only"
+        "status": "Met for integrated orders only",
+        "status_code": "PARTLY_MET",
+        "value_1": 1.02,
+        "value_2": 0.28
       },
       {
         "goal": "G3",
@@ -1415,7 +1469,10 @@
         "baseline": "about 1 working day",
         "target": "under 2 minutes; approvals within 4 business hours",
         "result": "p95 39.0 s; 86.6% of approvals on time",
-        "status": "Met for automatic decisions; approvals miss the 4-hour target"
+        "status": "Met for automatic decisions; approvals miss the 4-hour target",
+        "status_code": "PARTLY_MET",
+        "value_1": 39.0,
+        "value_2": 86.6
       },
       {
         "goal": "G4",
@@ -1423,7 +1480,10 @@
         "baseline": "about 60",
         "target": "below 6",
         "result": "29.1 a day",
-        "status": "Not met"
+        "status": "Not met",
+        "status_code": "NOT_MET",
+        "value_1": 29.1,
+        "value_2": null
       },
       {
         "goal": "G5",
@@ -1431,7 +1491,10 @@
         "baseline": "1.5 working days",
         "target": "same day",
         "result": "99.6% same day, median 0.22 hours",
-        "status": "Met"
+        "status": "Met",
+        "status_code": "MET",
+        "value_1": 99.6,
+        "value_2": 0.22
       },
       {
         "goal": "G6",
@@ -1439,7 +1502,10 @@
         "baseline": "about 45 a month",
         "target": "below 5 a month",
         "result": "1 in June",
-        "status": "Met"
+        "status": "Met",
+        "status_code": "MET",
+        "value_1": 1.0,
+        "value_2": null
       }
     ]
   }

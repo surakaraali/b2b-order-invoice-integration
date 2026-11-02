@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    participant WH as Warehouse
+    participant ERP as Vektör ERP
+    participant INT as Integration service
+    participant K as Köprü e-Belge SOAP service
+    participant G as GİB
+    participant D as Dealer ERP
+
+    WH->>ERP: Confirm shipment, order SHIPPED
+    ERP->>ERP: Create invoice, generate ETTN
+    ERP->>INT: Invoice created event
+    INT->>INT: Map invoice to UBL-TR XML
+    INT->>K: CheckUser with dealer VKN
+    K-->>INT: Registered or not registered
+    alt VKN not registered
+        INT->>INT: Hold invoice, create task for sales support
+    else Registered
+        INT->>K: SendInvoice with UBL-TR document
+        alt SOAP fault or validation error
+            K-->>INT: Error code
+            INT->>INT: Alert integration team, fix, resend
+        else Accepted
+            K-->>INT: Receipt id
+            K->>G: Deliver signed invoice
+            loop Every 5 minutes until a final status
+                INT->>K: GetInvoiceStatus with ETTN
+                K-->>INT: QUEUED, SENT, DELIVERED or ERROR
+            end
+            alt DELIVERED
+                INT->>ERP: Order INVOICED
+                INT-->>D: Webhook invoice.issued with ETTN, invoice number, order numbers, totals
+                G-->>D: Invoice available in the dealer's GİB inbox through its own integrator
+            else ERROR
+                INT->>INT: Alert integration team, fix, resend
+            end
+        end
+    end

@@ -1,4 +1,5 @@
 -- Step 13: scorecard of the six BRD goals over the last four weeks of the period (weeks 10 to 13, 7 June to 3 July).
+-- status_code and value_1, value_2 are the same results as numbers, for the report site.
 -- G1 has a six-month target date; the others apply from go-live. Status compares the result with the target.
 
 WITH p AS (SELECT * FROM report_params),
@@ -44,12 +45,16 @@ g6 AS (
 SELECT 'G1' AS goal, 'Order lines received through the API or the portal' AS metric,
        '0%' AS baseline, 'at least 80% by October 2027' AS target,
        g1.v || '%' AS result,
-       CASE WHEN g1.v >= 80 THEN 'Met' ELSE 'On the way; target date not reached' END AS status
+       CASE WHEN g1.v >= 80 THEN 'Met' ELSE 'On the way; target date not reached' END AS status,
+       CASE WHEN g1.v >= 80 THEN 'MET' ELSE 'ON_TRACK' END AS status_code,
+       g1.v AS value_1, NULL::DOUBLE AS value_2
 FROM g1
 UNION ALL
 SELECT 'G2', 'Orders corrected after entry', '4%', 'below 0.5%',
        g2.v || '% overall, ' || g2.v_integrated || '% for integrated orders',
-       CASE WHEN g2.v < 0.5 THEN 'Met' WHEN g2.v_integrated < 0.5 THEN 'Met for integrated orders only' ELSE 'Not met' END
+       CASE WHEN g2.v < 0.5 THEN 'Met' WHEN g2.v_integrated < 0.5 THEN 'Met for integrated orders only' ELSE 'Not met' END,
+       CASE WHEN g2.v < 0.5 THEN 'MET' WHEN g2.v_integrated < 0.5 THEN 'PARTLY_MET' ELSE 'NOT_MET' END,
+       g2.v, g2.v_integrated
 FROM g2
 UNION ALL
 SELECT 'G3', 'Time to first status; approvals within 4 business hours', 'about 1 working day',
@@ -57,18 +62,24 @@ SELECT 'G3', 'Time to first status; approvals within 4 business hours', 'about 1
        'p95 ' || g3.p95_seconds || ' s; ' || g3_tasks.on_time_pct || '% of approvals on time',
        CASE WHEN g3.p95_seconds < 120 AND g3_tasks.on_time_pct >= 100 THEN 'Met'
             WHEN g3.p95_seconds < 120 THEN 'Met for automatic decisions; approvals miss the 4-hour target'
-            ELSE 'Not met' END
+            ELSE 'Not met' END,
+       CASE WHEN g3.p95_seconds < 120 AND g3_tasks.on_time_pct >= 100 THEN 'MET'
+            WHEN g3.p95_seconds < 120 THEN 'PARTLY_MET' ELSE 'NOT_MET' END,
+       g3.p95_seconds, g3_tasks.on_time_pct
 FROM g3, g3_tasks
 UNION ALL
 SELECT 'G4', 'Stock questions by phone per working day', 'about 60', 'below 6',
-       g4.v || ' a day', CASE WHEN g4.v < 6 THEN 'Met' ELSE 'Not met' END
+       g4.v || ' a day', CASE WHEN g4.v < 6 THEN 'Met' ELSE 'Not met' END,
+       CASE WHEN g4.v < 6 THEN 'MET' ELSE 'NOT_MET' END, g4.v, NULL
 FROM g4
 UNION ALL
 SELECT 'G5', 'Invoice in the dealer''s inbox on the day of shipment', '1.5 working days', 'same day',
        g5.same_day_pct || '% same day, median ' || g5.median_hours || ' hours',
-       CASE WHEN g5.same_day_pct >= 95 THEN 'Met' ELSE 'Not met' END
+       CASE WHEN g5.same_day_pct >= 95 THEN 'Met' ELSE 'Not met' END,
+       CASE WHEN g5.same_day_pct >= 95 THEN 'MET' ELSE 'NOT_MET' END, g5.same_day_pct, g5.median_hours
 FROM g5
 UNION ALL
 SELECT 'G6', 'Reconciliation mismatches in June 2027', 'about 45 a month', 'below 5 a month',
-       g6.v || ' in June', CASE WHEN g6.v < 5 THEN 'Met' ELSE 'Not met' END
+       g6.v || ' in June', CASE WHEN g6.v < 5 THEN 'Met' ELSE 'Not met' END,
+       CASE WHEN g6.v < 5 THEN 'MET' ELSE 'NOT_MET' END, g6.v, NULL
 FROM g6;

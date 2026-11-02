@@ -1,0 +1,110 @@
+{
+  "epics": [
+    {
+      "id": "E1",
+      "name": "Order submission",
+      "points": 34,
+      "items": 6
+    },
+    {
+      "id": "E2",
+      "name": "Stock and catalogue",
+      "points": 13,
+      "items": 4
+    },
+    {
+      "id": "E3",
+      "name": "Exception approval",
+      "points": 16,
+      "items": 4
+    },
+    {
+      "id": "E4",
+      "name": "e-Invoice",
+      "points": 29,
+      "items": 6
+    },
+    {
+      "id": "E5",
+      "name": "Notifications and dealer portal",
+      "points": 24,
+      "items": 4
+    },
+    {
+      "id": "E6",
+      "name": "Operations and onboarding",
+      "points": 25,
+      "items": 6
+    }
+  ],
+  "sprints": [
+    {
+      "sprint": 1,
+      "points": 25,
+      "items": [
+        "US-01",
+        "US-02",
+        "US-21",
+        "US-27",
+        "SP-01",
+        "SP-02"
+      ]
+    },
+    {
+      "sprint": 2,
+      "points": 27,
+      "items": [
+        "US-03",
+        "US-04",
+        "US-05",
+        "US-07",
+        "US-09",
+        "US-10"
+      ]
+    },
+    {
+      "sprint": 3,
+      "points": 28,
+      "items": [
+        "US-06",
+        "US-08",
+        "US-11",
+        "US-12",
+        "US-14",
+        "US-20"
+      ]
+    },
+    {
+      "sprint": 4,
+      "points": 27,
+      "items": [
+        "US-13",
+        "US-15",
+        "US-16",
+        "US-17",
+        "US-18"
+      ]
+    },
+    {
+      "sprint": 5,
+      "points": 26,
+      "items": [
+        "US-19",
+        "US-22",
+        "US-23",
+        "US-24",
+        "US-25"
+      ]
+    },
+    {
+      "sprint": 6,
+      "points": 8,
+      "items": [
+        "US-26",
+        "US-28"
+      ]
+    }
+  ],
+  "total_points": 141,
+  "total_items": 30
+}

@@ -1,0 +1,21 @@
+stateDiagram-v2
+    [*] --> RECEIVED: POST /orders accepted with 202
+    RECEIVED --> APPROVED: All business rules pass
+    RECEIVED --> PENDING_APPROVAL: Credit limit exceeded or partial stock
+    RECEIVED --> REJECTED: Invalid SKU, below MOQ or dealer suspended
+    PENDING_APPROVAL --> APPROVED: Representative approves, full or reduced quantities
+    PENDING_APPROVAL --> REJECTED: Representative rejects with reason code
+    PENDING_APPROVAL --> PENDING_APPROVAL: 4 business hours passed, escalated to sales manager
+    APPROVED --> ALLOCATED: Stock reserved in the shipping warehouse
+    ALLOCATED --> SHIPPED: Warehouse confirms shipment
+    SHIPPED --> INVOICED: e-Invoice DELIVERED to the dealer GİB inbox
+    INVOICED --> CLOSED: Dealer acknowledges the match
+    INVOICED --> CLOSED: 30 days after INVOICED
+    REJECTED --> [*]
+    CLOSED --> [*]
+    note right of PENDING_APPROVAL
+        No stock is reserved while pending, RULE-07
+    end note
+    note right of SHIPPED
+        Shipment confirmation triggers the invoice flow
+    end note

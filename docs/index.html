@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B2B Order and e-Invoice Integration</title>
+  <meta name="description" content="A business analysis case: a distributor and 120 dealers move orders, stock queries and e-invoices from e-mail to system-to-system integration.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<!--
+  This file only holds the page structure.
+  All text lives in i18n.js (English and Turkish); app.js fills it in using the data-i18n keys
+  and builds the tables and charts from data/results.json and data/plan.json.
+    data-i18n       -> plain text
+    data-i18n-html  -> text with simple formatting such as <strong>, <code> or links
+    data-i18n-aria  -> screen-reader description of a chart or a group
+    data-i18n-alt   -> alternative text of an image
+-->
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top" data-i18n="nav.brand"></a>
+      <nav>
+        <a class="nav-section" href="#results" data-i18n="nav.results"></a>
+        <a class="nav-section" href="#operations" data-i18n="nav.operations"></a>
+        <a class="nav-section" href="#analysis" data-i18n="nav.analysis"></a>
+        <a class="nav-section" href="#plan" data-i18n="nav.plan"></a>
+        <a class="nav-api" href="api.html" data-i18n="nav.api"></a>
+        <a href="https://github.com/surakaraali/b2b-order-invoice-integration">GitHub</a>
+        <div class="lang-switch" role="group" data-i18n-aria="nav.language">
+          <button type="button" data-lang="en" lang="en">EN</button>
+          <button type="button" data-lang="tr" lang="tr">TR</button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ================= Hero ================= -->
+    <section class="hero wrap">
+      <p class="eyebrow" data-i18n="hero.eyebrow"></p>
+      <h1 data-i18n="hero.title"></h1>
+      <p class="lede" data-i18n="hero.lede"></p>
+      <p class="hero-links">
+        <a href="#analysis" data-i18n="hero.method"></a>
+        <a href="api.html" data-i18n="hero.api"></a>
+        <a href="https://github.com/surakaraali/b2b-order-invoice-integration" data-i18n="hero.code"></a>
+      </p>
+
+      <dl class="kpis">
+        <div class="kpi">
+          <dt data-i18n="kpi.integrated"></dt>
+          <dd class="kpi-value" id="kpi-integrated"></dd>
+          <dd class="kpi-note" id="kpi-integrated-note"></dd>
+        </div>
+        <div class="kpi">
+          <dt data-i18n="kpi.decision"></dt>
+          <dd class="kpi-value" id="kpi-decision"></dd>
+          <dd class="kpi-note" data-i18n="kpi.decisionNote"></dd>
+        </div>
+        <div class="kpi">
+          <dt data-i18n="kpi.invoice"></dt>
+          <dd class="kpi-value" id="kpi-invoice"></dd>
+          <dd class="kpi-note" data-i18n="kpi.invoiceNote"></dd>
+        </div>
+        <div class="kpi">
+          <dt data-i18n="kpi.lost"></dt>
+          <dd class="kpi-value" id="kpi-lost"></dd>
+          <dd class="kpi-note" data-i18n="kpi.lostNote"></dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- ================= Before ================= -->
+    <section class="finding wrap" id="before" aria-labelledby="h-before">
+      <p class="finding-tag"><span data-i18n="before.tag"></span><span data-i18n="before.topic"></span></p>
+      <div class="finding-body">
+        <h2 id="h-before" data-i18n="before.title"></h2>
+        <p data-i18n="before.body"></p>
+        <dl class="facts">
+          <div class="fact"><dt data-i18n="before.f1"></dt><dd data-i18n="before.f1v"></dd></div>
+          <div class="fact"><dt data-i18n="before.f2"></dt><dd data-i18n="before.f2v"></dd></div>
+          <div class="fact"><dt data-i18n="before.f3"></dt><dd data-i18n="before.f3v"></dd></div>
+          <div class="fact"><dt data-i18n="before.f4"></dt><dd data-i18n="before.f4v"></dd></div>
+        </dl>
+        <figure class="diagram">
+          <figcaption data-i18n="before.figure"></figcaption>
+          <a href="assets/bpmn/01_as_is_order_to_invoice.png"><img src="assets/bpmn/01_as_is_order_to_invoice.png" data-i18n-alt="before.figureAlt" loading="lazy" width="2400" height="1056"></a>
+          <p class="figure-note" data-i18n-html="before.figureNote"></p>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ================= After ================= -->
+    <section class="finding wrap" id="after" aria-labelledby="h-after">
+      <p class="finding-tag"><span data-i18n="after.tag"></span><span data-i18n="after.topic"></span></p>
+      <div class="finding-body">
+        <h2 id="h-after" data-i18n="after.title"></h2>
+        <p data-i18n="after.body"></p>
+        <div class="flows">
+          <article class="flow">
+            <h3 data-i18n="flow.order"></h3>
+            <p data-i18n-html="flow.orderBody"></p>
+          </article>
+          <article class="flow">
+            <h3 data-i18n="flow.stock"></h3>
+            <p data-i18n-html="flow.stockBody"></p>
+          </article>
+          <article class="flow">
+            <h3 data-i18n="flow.invoice"></h3>
+            <p data-i18n-html="flow.invoiceBody"></p>
+          </article>
+        </div>
+        <figure class="diagram">
+          <figcaption data-i18n="after.figureOrder"></figcaption>
+          <a href="assets/bpmn/02_to_be_order_and_stock.png"><img src="assets/bpmn/02_to_be_order_and_stock.png" data-i18n-alt="after.figureOrderAlt" loading="lazy" width="2400" height="1110"></a>
+        </figure>
+        <figure class="diagram">
+          <figcaption data-i18n="after.figureInvoice"></figcaption>
+          <a href="assets/bpmn/03_to_be_invoice.png"><img src="assets/bpmn/03_to_be_invoice.png" data-i18n-alt="after.figureInvoiceAlt" loading="lazy" width="2400" height="1175"></a>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ================= Results ================= -->
+    <div id="results">
+      <section class="section-intro wrap">
+        <h2 data-i18n="results.title"></h2>
+        <p data-i18n="results.body"></p>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-score">
+        <p class="finding-tag"><span data-i18n="score.tag"></span><span data-i18n="score.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-score" data-i18n="score.title"></h2>
+          <p data-i18n="score.body"></p>
+          <div class="table-wrap"><table class="data-table scorecard" id="scorecard"></table></div>
+          <details class="query" data-query="kpi_scorecard"></details>
+        </div>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-adopt">
+        <p class="finding-tag"><span data-i18n="adopt.tag"></span><span data-i18n="adopt.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-adopt" data-i18n="adopt.title"></h2>
+          <p data-i18n="adopt.body"></p>
+          <figure class="figure-wide">
+            <figcaption data-i18n="chart.adoption"></figcaption>
+            <div class="chart" style="height: 260px"><canvas id="chart-adoption" role="img" data-i18n-aria="chart.adoptionAria"></canvas></div>
+            <details class="query" data-query="kpi_channel_adoption"></details>
+          </figure>
+        </div>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-phone">
+        <p class="finding-tag"><span data-i18n="phone.tag"></span><span data-i18n="phone.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-phone" data-i18n="phone.title"></h2>
+          <p data-i18n="phone.body"></p>
+          <div class="figure-pair">
+            <figure>
+              <figcaption data-i18n="chart.phone"></figcaption>
+              <div class="chart" style="height: 230px"><canvas id="chart-phone" role="img" data-i18n-aria="chart.phoneAria"></canvas></div>
+            </figure>
+            <figure>
+              <figcaption data-i18n="chart.stockApi"></figcaption>
+              <div class="chart" style="height: 230px"><canvas id="chart-stock-api" role="img" data-i18n-aria="chart.stockApiAria"></canvas></div>
+            </figure>
+          </div>
+          <details class="query" data-query="kpi_stock_self_service"></details>
+        </div>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-approve">
+        <p class="finding-tag"><span data-i18n="approve.tag"></span><span data-i18n="approve.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-approve" data-i18n="approve.title"></h2>
+          <p data-i18n="approve.body"></p>
+          <dl class="stats" id="approve-stats"></dl>
+          <figure class="figure-wide">
+            <figcaption data-i18n="chart.approvals"></figcaption>
+            <div class="chart" style="height: 170px"><canvas id="chart-approvals" role="img" data-i18n-aria="chart.approvalsAria"></canvas></div>
+            <details class="query" data-query="kpi_decision_time"></details>
+          </figure>
+        </div>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-invoice">
+        <p class="finding-tag"><span data-i18n="invoice.tag"></span><span data-i18n="invoice.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-invoice" data-i18n="invoice.title"></h2>
+          <p data-i18n="invoice.body"></p>
+          <dl class="stats" id="invoice-stats"></dl>
+          <details class="query" data-query="kpi_invoice_cycle"></details>
+          <details class="query" data-query="kpi_reconciliation"></details>
+          <details class="query" data-query="kpi_order_corrections"></details>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= Operations ================= -->
+    <div id="operations">
+      <section class="section-intro wrap">
+        <h2 data-i18n="ops.title"></h2>
+        <p data-i18n="ops.body"></p>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-exceptions">
+        <p class="finding-tag"><span data-i18n="exc.tag"></span><span data-i18n="exc.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-exceptions" data-i18n="exc.title"></h2>
+          <p data-i18n="exc.body"></p>
+          <div class="table-wrap"><table class="data-table exceptions" id="exceptions"></table></div>
+          <details class="query" data-query="daily_exception_report"></details>
+        </div>
+      </section>
+
+      <section class="finding wrap" aria-labelledby="h-resilience">
+        <p class="finding-tag"><span data-i18n="res.tag"></span><span data-i18n="res.topic"></span></p>
+        <div class="finding-body">
+          <h2 id="h-resilience" data-i18n="res.title"></h2>
+          <p data-i18n="res.body"></p>
+          <div class="table-wrap"><table class="data-table" id="incidents"></table></div>
+          <details class="query" data-query="ops_incidents"></details>
+
+          <figure class="figure-wide">
+            <figcaption data-i18n="chart.webhooks"></figcaption>
+            <div class="chart" style="height: 260px"><canvas id="chart-webhooks" role="img" data-i18n-aria="chart.webhooksAria"></canvas></div>
+            <details class="query" data-query="ops_webhook_delivery"></details>
+          </figure>
+
+          <h3 class="sub-heading" data-i18n="res.outcomes"></h3>
+          <p id="outcomes-note"></p>
+          <div class="table-wrap"><table class="data-table" id="outcomes"></table></div>
+          <details class="query" data-query="ops_invoice_delivery"></details>
+
+          <h3 class="sub-heading" data-i18n="res.submissions"></h3>
+          <p id="submissions-note"></p>
+          <details class="query" data-query="ops_order_submissions"></details>
+          <details class="query" data-query="data_quality"></details>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= Analysis ================= -->
+    <section class="method wrap" id="analysis" aria-labelledby="h-analysis">
+      <h2 id="h-analysis" data-i18n="analysis.title"></h2>
+      <p class="method-lede" data-i18n="analysis.body"></p>
+
+      <div class="cards">
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/analysis/01_brd.md">
+          <span class="card-kicker" data-i18n="card.brd.kicker"></span>
+          <h3 data-i18n="card.brd.title"></h3>
+          <p data-i18n="card.brd.body"></p>
+          <span class="card-figure" data-i18n="card.brd.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/analysis/02_process_as_is_to_be.md">
+          <span class="card-kicker" data-i18n="card.process.kicker"></span>
+          <h3 data-i18n="card.process.title"></h3>
+          <p data-i18n="card.process.body"></p>
+          <span class="card-figure" data-i18n="card.process.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/analysis/03_use_cases.md">
+          <span class="card-kicker" data-i18n="card.uc.kicker"></span>
+          <h3 data-i18n="card.uc.title"></h3>
+          <p data-i18n="card.uc.body"></p>
+          <span class="card-figure" data-i18n="card.uc.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/analysis/04_field_mapping.md">
+          <span class="card-kicker" data-i18n="card.map.kicker"></span>
+          <h3 data-i18n="card.map.title"></h3>
+          <p data-i18n="card.map.body"></p>
+          <span class="card-figure" data-i18n="card.map.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/analysis/05_error_scenarios.md">
+          <span class="card-kicker" data-i18n="card.err.kicker"></span>
+          <h3 data-i18n="card.err.title"></h3>
+          <p data-i18n="card.err.body"></p>
+          <span class="card-figure" data-i18n="card.err.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/analysis/06_nfr.md">
+          <span class="card-kicker" data-i18n="card.nfr.kicker"></span>
+          <h3 data-i18n="card.nfr.title"></h3>
+          <p data-i18n="card.nfr.body"></p>
+          <span class="card-figure" data-i18n="card.nfr.figure"></span>
+        </a>
+        <a class="card" href="api.html">
+          <span class="card-kicker" data-i18n="card.api.kicker"></span>
+          <h3 data-i18n="card.api.title"></h3>
+          <p data-i18n="card.api.body"></p>
+          <span class="card-figure" data-i18n="card.api.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/api/soap/README.md">
+          <span class="card-kicker" data-i18n="card.soap.kicker"></span>
+          <h3 data-i18n="card.soap.title"></h3>
+          <p data-i18n="card.soap.body"></p>
+          <span class="card-figure" data-i18n="card.soap.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/api/postman/reports/test-report.md">
+          <span class="card-kicker" data-i18n="card.postman.kicker"></span>
+          <h3 data-i18n="card.postman.title"></h3>
+          <p data-i18n="card.postman.body"></p>
+          <span class="card-figure" data-i18n="card.postman.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/sql/README.md">
+          <span class="card-kicker" data-i18n="card.sql.kicker"></span>
+          <h3 data-i18n="card.sql.title"></h3>
+          <p data-i18n="card.sql.body"></p>
+          <span class="card-figure" data-i18n="card.sql.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/agile/backlog.md">
+          <span class="card-kicker" data-i18n="card.backlog.kicker"></span>
+          <h3 data-i18n="card.backlog.title"></h3>
+          <p data-i18n="card.backlog.body"></p>
+          <span class="card-figure" data-i18n="card.backlog.figure"></span>
+        </a>
+        <a class="card" href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/design/wireframes/README.md">
+          <span class="card-kicker" data-i18n="card.wire.kicker"></span>
+          <h3 data-i18n="card.wire.title"></h3>
+          <p data-i18n="card.wire.body"></p>
+          <span class="card-figure" data-i18n="card.wire.figure"></span>
+        </a>
+      </div>
+
+      <figure class="diagram">
+        <figcaption data-i18n="analysis.ucFigure"></figcaption>
+        <a href="assets/uml/00_use_case_diagram.png"><img class="diagram-narrow" src="assets/uml/00_use_case_diagram.png" data-i18n-alt="analysis.ucAlt" loading="lazy" width="2154" height="1822"></a>
+      </figure>
+
+      <details class="uml" id="uml">
+        <summary data-i18n="uml.summary"></summary>
+        <p class="figure-note" data-i18n="uml.note"></p>
+        <div class="uml-grid" id="uml-diagrams"></div>
+      </details>
+
+      <h3 class="sub-heading" id="api" data-i18n="api.title"></h3>
+      <p data-i18n-html="api.body"></p>
+      <div class="table-wrap">
+        <table class="data-table endpoints">
+          <thead><tr><th data-i18n="api.colOperation"></th><th data-i18n="api.colPurpose"></th><th data-i18n="api.colTests"></th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /orders</code></td><td data-i18n="api.postOrders"></td><td data-i18n="api.tPost"></td></tr>
+            <tr><td><code>GET /orders</code>, <code>GET /orders/{orderId}</code></td><td data-i18n="api.getOrders"></td><td>HP-06, HP-08, HP-15, NT-19, NT-20</td></tr>
+            <tr><td><code>GET /stock</code></td><td data-i18n="api.getStock"></td><td data-i18n="api.tStock"></td></tr>
+            <tr><td><code>GET /products</code></td><td data-i18n="api.getProducts"></td><td>HP-02, HP-03</td></tr>
+            <tr><td><code>GET /invoices</code>, <code>GET /invoices/{ettn}</code></td><td data-i18n="api.getInvoices"></td><td>HP-11, HP-12</td></tr>
+            <tr><td><code>POST /invoices/{ettn}/acknowledge</code></td><td data-i18n="api.ack"></td><td>HP-13, HP-14, NT-27</td></tr>
+            <tr><td><code>order.status.changed</code>, <code>invoice.issued</code></td><td data-i18n="api.webhooks"></td><td data-i18n="api.webhooksTests"></td></tr>
+            <tr><td><code>CheckUser</code>, <code>SendInvoice</code>, <code>GetInvoiceStatus</code></td><td data-i18n="api.soap"></td><td data-i18n="api.tSoap"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="method-grid">
+        <div>
+          <h3 data-i18n="method.tools"></h3>
+          <ul>
+            <li data-i18n="method.tool1"></li>
+            <li data-i18n="method.tool2"></li>
+            <li data-i18n="method.tool3"></li>
+            <li data-i18n="method.tool4"></li>
+            <li data-i18n="method.tool5"></li>
+          </ul>
+        </div>
+        <div>
+          <h3 data-i18n="method.limits"></h3>
+          <ul>
+            <li data-i18n="method.limit1"></li>
+            <li data-i18n="method.limit2"></li>
+            <li data-i18n="method.limit3"></li>
+            <li data-i18n="method.limit4"></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= Plan ================= -->
+    <section class="method wrap" id="plan" aria-labelledby="h-plan">
+      <h2 id="h-plan" data-i18n="plan.title"></h2>
+      <p class="method-lede" data-i18n="plan.body"></p>
+      <ol class="timeline" id="timeline"></ol>
+      <figure class="figure-wide">
+        <figcaption data-i18n="chart.epics"></figcaption>
+        <div class="chart" style="height: 240px"><canvas id="chart-epics" role="img" data-i18n-aria="chart.epicsAria"></canvas></div>
+      </figure>
+      <h3 class="sub-heading" data-i18n="plan.wireframes"></h3>
+      <p data-i18n-html="plan.wireframesBody"></p>
+      <div class="wireframes" id="wireframes"></div>
+      <p class="source" data-i18n-html="plan.links"></p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <p data-i18n="footer"></p>
+      <p class="footer-links">
+        <a href="https://www.linkedin.com/in/surakaraali/">LinkedIn</a>
+        <a href="https://github.com/surakaraali">GitHub</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

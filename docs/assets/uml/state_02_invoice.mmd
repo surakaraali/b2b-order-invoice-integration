@@ -1,0 +1,21 @@
+stateDiagram-v2
+    [*] --> CREATED: ERP creates the invoice and ETTN on shipment
+    CREATED --> MAPPED: UBL-TR XML produced
+    MAPPED --> HELD: Dealer VKN not on the GİB registered-user list
+    HELD --> MAPPED: Tax data corrected by sales support
+    MAPPED --> SEND_FAILED: SendInvoice returns a SOAP fault or validation error
+    SEND_FAILED --> MAPPED: Cause fixed by the integration team
+    MAPPED --> AT_INTEGRATOR: SendInvoice accepted, receipt id stored
+    state AT_INTEGRATOR {
+        [*] --> QUEUED
+        QUEUED --> SENT_TO_GIB: Integrator reports SENT
+    }
+    AT_INTEGRATOR --> DELIVERED: Integrator reports DELIVERED
+    AT_INTEGRATOR --> ERROR: Integrator reports ERROR
+    ERROR --> MAPPED: Cause fixed, resent
+    DELIVERED --> NOTIFIED: Order set to INVOICED, invoice.issued webhook sent
+    NOTIFIED --> ACKNOWLEDGED: Dealer acknowledges, or 30 days pass
+    ACKNOWLEDGED --> [*]
+    note right of AT_INTEGRATOR
+        Status polled every 5 minutes with GetInvoiceStatus
+    end note

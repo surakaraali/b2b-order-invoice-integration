@@ -1,5 +1,6 @@
 -- Step 2: the daily exception report (UC-09, BRD section 7.6), as run on Monday 5 July 2027 at 07:00.
 -- Five groups of items that would otherwise stall silently. Each line names the order, invoice or dealer to act on.
+-- issue_code, document_no and quantity let the report site build the text in Turkish or English.
 -- Group 1 reads "without an invoice" as "no invoice accepted by the integrator", so held and failed invoices are included.
 
 WITH p AS (SELECT * FROM report_params),
@@ -14,6 +15,12 @@ g1 AS (
     SELECT '1 Shipped, invoice not sent'                          AS exception_group,
            s.order_id                                             AS reference,
            o.dealer_code,
+           CASE WHEN i.ettn IS NULL               THEN 'NO_INVOICE'
+                WHEN i.final_state = 'HELD'        THEN 'HELD'
+                WHEN i.final_state = 'SEND_FAILED' THEN 'SEND_FAILED'
+                ELSE 'NOT_SENT' END                               AS issue_code,
+           o.dealer_order_no                                      AS document_no,
+           NULL::INTEGER                                          AS quantity,
            CASE WHEN i.ettn IS NULL               THEN 'No invoice created in the ERP'
                 WHEN i.final_state = 'HELD'        THEN 'Invoice held: dealer tax number not on the GİB list'
                 WHEN i.final_state = 'SEND_FAILED' THEN 'Invoice rejected by the integrator, not yet resent'
@@ -33,6 +40,9 @@ g2 AS (
     SELECT '2 Sent, not delivered within 24 hours',
            i.ettn,
            i.dealer_code,
+           'AT_INTEGRATOR',
+           i.invoice_no,
+           NULL::INTEGER,
            'Invoice ' || i.invoice_no || ' still ' || i.final_state || ' at Köprü e-Belge',
            i.accepted_at
     FROM invoices i, p
@@ -45,6 +55,9 @@ g3 AS (
     SELECT '3 Delivered, not acknowledged in 5 working days',
            i.ettn,
            i.dealer_code,
+           'NOT_ACKNOWLEDGED',
+           i.invoice_no,
+           NULL::INTEGER,
            'Invoice ' || i.invoice_no || ' for dealer order ' || o.dealer_order_no,
            i.delivered_at
     FROM invoices i
@@ -75,6 +88,9 @@ g4 AS (
     SELECT '4 Webhook endpoint failing',
            e.dealer_code,
            e.dealer_code,
+           'WEBHOOK_FAILING',
+           NULL,
+           e.events::INTEGER,
            e.events || ' events failed all 6 attempts; latest attempt ' || l.last_result,
            e.first_exhausted_at
     FROM exhausted e JOIN last_attempt l USING (dealer_code)
@@ -85,6 +101,10 @@ g5 AS (
     SELECT '5 Shipment confirmation late or missing',
            s.order_id,
            o.dealer_code,
+           CASE WHEN s.confirmed_at IS NULL THEN 'NOT_CONFIRMED' ELSE 'LATE_CONFIRMATION' END,
+           o.dealer_order_no,
+           CASE WHEN s.confirmed_at IS NULL THEN NULL
+                ELSE date_diff('hour', s.carrier_pickup_at, s.confirmed_at)::INTEGER END,
            CASE WHEN s.confirmed_at IS NULL THEN 'Picked up by the carrier, not confirmed in the ERP'
                 ELSE 'Confirmed ' || round(date_diff('minute', s.carrier_pickup_at, s.confirmed_at) / 60.0, 1)
                      || ' hours after carrier pickup' END,
@@ -101,6 +121,7 @@ all_groups AS (
     UNION ALL SELECT * FROM g4 UNION ALL SELECT * FROM g5
 )
 SELECT a.exception_group, a.reference, a.dealer_code, a.detail,
-       a.since, date_diff('hour', a.since, p.as_of) AS age_hours
+       a.since, date_diff('hour', a.since, p.as_of) AS age_hours,
+       a.issue_code, a.document_no, a.quantity          -- structured fields for the report site
 FROM all_groups a, p
 ORDER BY a.exception_group, a.since;

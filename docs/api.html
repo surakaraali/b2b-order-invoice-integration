@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vektör Dealer Integration API</title>
+  <meta name="description" content="OpenAPI 3.1 specification of the dealer API in the B2B order and e-invoice integration case, shown with Swagger UI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.29.1/swagger-ui.css">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .api-intro { padding-top: 48px; padding-bottom: 24px; }
+    .api-intro h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; letter-spacing: -0.02em; }
+    .api-intro .lede { max-width: 64ch; }
+    /* Swagger UI has no dark theme, so it always sits on a light panel. */
+    .swagger-shell { background: #ffffff; color-scheme: light; border-top: 1px solid var(--hairline); padding: 8px 0 56px; }
+    .swagger-shell .swagger-ui .info { margin: 24px 0; }
+    .swagger-shell .swagger-ui .info .title, .swagger-shell .swagger-ui { font-family: var(--font); }
+    .swagger-shell .swagger-ui .scheme-container { box-shadow: none; padding: 16px 0; }
+    .loading { color: #646d7f; font-size: 15px; padding: 24px 0; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="index.html" id="back">Back to the report</a>
+      <nav>
+        <a href="https://github.com/surakaraali/b2b-order-invoice-integration/blob/main/api/openapi/vektor-dealer-api.v1.yaml">GitHub</a>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" data-lang="en" lang="en">EN</button>
+          <button type="button" data-lang="tr" lang="tr">TR</button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrap api-intro">
+      <h1 id="title">Vektör Dealer Integration API</h1>
+      <p class="lede" id="lede"></p>
+      <p class="hero-links">
+        <a href="assets/api/vektor-dealer-api.v1.yaml" download id="download"></a>
+        <a href="https://github.com/surakaraali/b2b-order-invoice-integration/tree/main/api/postman" id="tests"></a>
+      </p>
+    </section>
+    <div class="swagger-shell">
+      <div class="wrap"><div id="swagger-ui"><p class="loading" id="loading"></p></div></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <p id="footer"></p>
+      <p class="footer-links">
+        <a href="https://www.linkedin.com/in/surakaraali/">LinkedIn</a>
+        <a href="https://github.com/surakaraali">GitHub</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.29.1/swagger-ui-bundle.js"></script>
+  <script>
+    // A small page: the texts live here, the specification is the same file as in api/openapi/.
+    const TEXT = {
+      en: {
+        back: 'Back to the report',
+        lede: 'The dealer-facing REST API of the case: orders, stock, products, invoices, webhooks and RFC 9457 errors, described in OpenAPI 3.1. The servers are fictional, so requests cannot be sent from this page; the Postman collection runs the same calls against a local simulator.',
+        download: 'Download the OpenAPI file',
+        tests: 'See the Postman tests',
+        loading: 'Loading the specification…',
+        footer: 'Sura Karaali. A fictional business analysis case for a portfolio; the companies and the data are invented.',
+      },
+      tr: {
+        back: 'Rapora dön',
+        lede: 'Vakanın bayilere açık REST API’si: siparişler, stok, ürünler, faturalar, webhook’lar ve RFC 9457 hataları, OpenAPI 3.1 ile tanımlandı. Sunucular kurgusal olduğu için bu sayfadan istek gönderilemiyor; Postman koleksiyonu aynı çağrıları yerel bir simülatöre karşı çalıştırıyor. Teknik içerik İngilizcedir.',
+        download: 'OpenAPI dosyasını indir',
+        tests: 'Postman testlerine bak',
+        loading: 'Spesifikasyon yükleniyor…',
+        footer: 'Sura Karaali. Portföy için hazırlanmış kurgusal bir iş analizi vakası; şirketler ve veri hayalidir.',
+      },
+    };
+
+    function pickLanguage() {
+      const fromUrl = new URLSearchParams(location.search).get('lang');
+      if (fromUrl in TEXT) return fromUrl;
+      try { const saved = localStorage.getItem('lang'); if (saved in TEXT) return saved; } catch { /* ignore */ }
+      return navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
+    }
+
+    let lang = pickLanguage();
+
+    function render() {
+      document.documentElement.lang = lang;
+      const text = TEXT[lang];
+      for (const id of ['lede', 'download', 'tests', 'footer']) document.getElementById(id).textContent = text[id];
+      const loading = document.getElementById('loading');
+      if (loading) loading.textContent = text.loading;
+      const back = document.getElementById('back');
+      back.textContent = text.back;
+      back.href = `index.html?lang=${lang}#api`;
+      document.querySelectorAll('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+    }
+
+    document.querySelectorAll('[data-lang]').forEach(button => button.addEventListener('click', () => {
+      lang = button.dataset.lang;
+      try { localStorage.setItem('lang', lang); } catch { /* ignore */ }
+      const url = new URL(location.href);
+      url.searchParams.set('lang', lang);
+      history.replaceState(null, '', url);
+      render();
+    }));
+
+    render();
+    window.ui = SwaggerUIBundle({
+      url: 'assets/api/vektor-dealer-api.v1.yaml',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 0,
+      supportedSubmitMethods: [],   // fictional servers: no "Try it out"
+      layout: 'BaseLayout',
+    });
+  </script>
+</body>
+</html>

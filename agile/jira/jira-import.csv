@@ -217,7 +217,7 @@ Scenario: A dealer exceeds the stock limit
 {code}",High,3,b2b-integration e2 sprint-2,VKT Sprint 2
 US-11,E3,Story,US-11 Create approval tasks for exceptions,"As a sales representative, I want every credit or stock exception of my dealers to appear in my task queue, so that I decide with all facts in one place instead of on the phone.
 
-Traces to: BR-05, RULE-08, UC-04
+Traces to: BR-05, RULE-08, UC-04, wireframe 05
 Verified by: HP-09, HP-10
 
 Acceptance criteria:
@@ -230,7 +230,7 @@ Scenario: A task is created
 {code}",High,5,b2b-integration e3 sprint-3,VKT Sprint 3
 US-12,E3,Story,US-12 Approve or reject an exception,"As a sales representative, I want to approve or reject a pending order with a reason, so that the dealer is told at once and the decision is recorded.
 
-Traces to: BR-05, RULE-09
+Traces to: BR-05, RULE-09, wireframe 05
 Verified by: Sprint review demo
 
 Acceptance criteria:
@@ -393,7 +393,7 @@ Scenario: Another dealer's order
 {code}",High,3,b2b-integration e5 sprint-1,VKT Sprint 1
 US-22,E5,Story,US-22 Portal: place an order with live stock,"As a small dealer without an ERP, I want to place an order in the portal and see stock while I type, so that I stop sending Excel files by e-mail.
 
-Traces to: BR-11, UC-01 A3
+Traces to: BR-11, UC-01 A3, wireframe 01
 Verified by: Sprint review demo
 
 Acceptance criteria:
@@ -406,7 +406,7 @@ Scenario: Order in the portal
 {code}",Medium,8,b2b-integration e5 sprint-5,VKT Sprint 5
 US-23,E5,Story,US-23 Portal: follow orders and invoices,"As a small dealer without an ERP, I want to see my orders, their status and my invoices in the portal, so that I do not call sales support to ask.
 
-Traces to: BR-11, UC-03 A2, UC-08 A2
+Traces to: BR-11, UC-03 A2, UC-08 A2, wireframes 02 to 04
 Verified by: Sprint review demo
 
 Acceptance criteria:

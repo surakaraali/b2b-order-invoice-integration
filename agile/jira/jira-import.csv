@@ -1,0 +1,513 @@
+Issue Id,Parent Id,Issue Type,Summary,Description,Priority,Story Points,Labels,Sprint
+E1,,Epic,E1 Order submission,"Dealers submit orders from their ERP or the portal and get an immediate, validated, duplicate-safe answer.
+
+Sources: BR-01 to BR-05, UC-01",High,,b2b-integration e1,
+E2,,Epic,E2 Stock and catalogue,"Dealers see sellable stock and their prices before they order.
+
+Sources: BR-07, BR-13, UC-02",High,,b2b-integration e2,
+E3,,Epic,E3 Exception approval,"Credit and stock exceptions are decided within 4 business hours, with a record.
+
+Sources: BR-05, BR-12, UC-04",High,,b2b-integration e3,
+E4,,Epic,E4 e-Invoice,"Every shipment is invoiced as e-Fatura automatically and the dealer can match it without typing.
+
+Sources: BR-08, BR-09, BR-14, UC-05 to UC-08",High,,b2b-integration e4,
+E5,,Epic,E5 Notifications and dealer portal,"Dealers know where every order stands; small dealers do everything in the portal.
+
+Sources: BR-06, BR-11, UC-03",High,,b2b-integration e5,
+E6,,Epic,E6 Operations and onboarding,"Dealers are connected in a repeatable way and nothing stalls unnoticed after go-live.
+
+Sources: BR-10, UC-09, UC-10, NFR",High,,b2b-integration e6,
+US-01,E1,Story,US-01 Submit an order through the API,"As a dealer whose ERP is connected, I want to send a purchase order to Vektör from my own system, so that nobody has to re-key it and I get an order number at once.
+
+Traces to: BR-01, BR-02, RULE-01, UC-01
+Verified by: HP-05, NT-02, NT-03
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: A valid order is accepted
+  Given my connector holds a valid access token
+  When it sends POST /orders with two valid lines and a new Idempotency-Key
+  Then the response is 202 Accepted within 2 seconds
+  And the body carries an order number and the status RECEIVED
+  And the Location header points to the new order
+
+Scenario: The access token has expired
+  Given my connector's token expired
+  When it sends POST /orders
+  Then the response is 401 with code UNAUTHORIZED
+  And no order is stored
+
+Scenario: The dealer is suspended
+  Given my dealer account is suspended
+  When my connector sends POST /orders with a valid token
+  Then the response is 403 with code DEALER_SUSPENDED
+{code}",High,5,b2b-integration e1 sprint-1,VKT Sprint 1
+US-02,E1,Story,US-02 Validate order requests at the boundary,"As a dealer whose ERP is connected, I want to learn exactly which fields are wrong when an order is rejected, so that my connector or my staff can fix it without calling Vektör.
+
+Traces to: BR-04, field mapping section 3, error scenarios section 3
+Verified by: NT-01, NT-11, NT-12, NT-13, NT-28
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Several fields are invalid
+  Given an order without a delivery city and with 1.5 pieces on line 3
+  When my connector submits it
+  Then the response is 400 with code VALIDATION_FAILED in application/problem+json
+  And errors lists FIELD_REQUIRED for deliveryAddress.city and QUANTITY_NOT_INTEGER for lines[2].quantity
+  And nothing is stored
+
+Scenario: Unknown fields are refused
+  Given an order line that carries a price
+  When my connector submits it
+  Then the response is 400 with UNKNOWN_FIELD for lines[0].price
+
+Scenario: Messages follow the requested language
+  Given the request header Accept-Language is en
+  When an invalid order is submitted
+  Then detail and every field message are in English and the title stays English
+
+Scenario: Limits are enforced
+  When an order has 201 lines or a body over 256 KB
+  Then the response is 400 with TOO_MANY_LINES or 413 with PAYLOAD_TOO_LARGE
+{code}",High,8,b2b-integration e1 sprint-1,VKT Sprint 1
+US-03,E1,Story,US-03 Protect against duplicate submissions,"As a dealer whose ERP is connected, I want to retry a submission safely after a timeout, so that a network problem never creates a second order.
+
+Traces to: BR-03, RULE-10
+Verified by: NT-04, NT-05, NT-06, NT-07, NT-08, NT-14, NT-15
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: A retry with the same key and body
+  Given an order was accepted with Idempotency-Key K
+  When my connector sends the identical request again with K within 7 days
+  Then the response repeats the original 202 and order number
+  And only one order exists
+
+Scenario: The same key with a different body
+  When my connector reuses K for a different order
+  Then the response is 422 with IDEMPOTENCY_KEY_REUSED
+
+Scenario: Two identical requests at the same moment
+  When two requests with K arrive while the first is still being processed
+  Then one is accepted and the other gets 409 REQUEST_IN_PROGRESS with Retry-After
+
+Scenario: A dealer order number is reused
+  Given dealer order PO-1 exists and is not rejected
+  When a new request with another key uses PO-1
+  Then the response is 409 with DUPLICATE_DEALER_ORDER_NO
+  But if PO-1 was rejected, the new order is accepted
+{code}",High,5,b2b-integration e1 sprint-2,VKT Sprint 2
+US-04,E1,Story,US-04 Run the business rules on accepted orders,"As sales operations, I want every accepted order to be checked against catalogue, price list, minimum quantity, credit limit and stock, so that clean orders are approved automatically and only exceptions reach a person.
+
+Traces to: BR-04, BR-05, RULE-02 to RULE-06
+Verified by: HP-06, HP-09, HP-10, NT-09, NT-10
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: A clean order is approved automatically
+  Given all lines are active, priced and above their minimum, with credit and stock available
+  When the rules run
+  Then the order becomes APPROVED by SYSTEM within 60 seconds of acceptance
+
+Scenario: Credit limit exceeded
+  Given open balance plus order total including VAT is above the dealer's credit limit
+  Then the order becomes PENDING_APPROVAL with reason CREDIT_LIMIT and no stock is reserved
+
+Scenario: Stock is not enough
+  Given one line is not fully available in the dealer's shipping warehouse
+  Then the order becomes PENDING_APPROVAL with reason PARTIAL_STOCK and the line is marked
+
+Scenario: Invalid product or quantity
+  Given a line references an inactive SKU, or a quantity below the minimum
+  Then the order becomes REJECTED with INVALID_SKU or BELOW_MOQ
+{code}",High,8,b2b-integration e1 sprint-2,VKT Sprint 2
+US-05,E1,Story,US-05 Reserve stock on approval,"As the warehouse, I want stock to be reserved as soon as an order is approved, so that two dealers are never promised the same goods.
+
+Traces to: RULE-07
+Verified by: HP-07
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Approval reserves stock
+  Given an order for 2 units of SKU 100234 is approved
+  When the reservation succeeds
+  Then the order becomes ALLOCATED
+  And the sellable quantity in the shipping warehouse drops by 2
+
+Scenario: Stock disappears between approval and reservation
+  When the reservation fails for a line after 3 attempts
+  Then the order returns to PENDING_APPROVAL with PARTIAL_STOCK and the task is reopened
+{code}",High,3,b2b-integration e1 sprint-2,VKT Sprint 2
+US-06,E1,Story,US-06 Keep orders safe when the ERP is unavailable,"As the integration team, I want accepted orders to wait and be processed when the ERP is back, so that an ERP outage delays work but loses nothing.
+
+Traces to: NFR-REL-03, NFR-REL-04, error scenarios A9, A12
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: The ERP does not answer
+  Given an order was accepted with 202
+  When the ERP cannot be reached for the rule checks
+  Then the order stays RECEIVED and the rules are retried every minute
+  And the integration team is alerted after 15 minutes
+
+Scenario: The integration database is down
+  When the order cannot be stored
+  Then the response is 503 SERVICE_UNAVAILABLE with Retry-After and no 202 is ever given
+{code}",High,5,b2b-integration e1 sprint-3,VKT Sprint 3
+US-07,E2,Story,US-07 Query sellable stock per warehouse,"As a dealer purchaser, I want to see what can be delivered before I order, so that I stop calling sales support and my orders are not cut.
+
+Traces to: BR-07, RULE-11, RULE-12, UC-02
+Verified by: HP-04, NT-17, NT-18
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Stock for several SKUs
+  When my system asks GET /stock for up to 50 SKUs
+  Then each known SKU shows sellable quantity per warehouse, at most 5 minutes old
+  And exactly one warehouse is marked as my shipping warehouse
+
+Scenario: Unknown SKUs do not fail the request
+  When one of the SKUs does not exist
+  Then that item is flagged UNKNOWN and the others are answered
+
+Scenario: Too many SKUs
+  When more than 50 SKUs are asked
+  Then the response is 400 with TOO_MANY_SKUS
+{code}",High,5,b2b-integration e2 sprint-2,VKT Sprint 2
+US-08,E2,Story,US-08 Show expected receipt dates,"As a dealer purchaser, I want to see when an unavailable item is expected back, so that I can plan or order an alternative.
+
+Traces to: BR-13
+Verified by: HP-04
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: An open purchase order exists
+  Given SKU 100234 is out of stock in IZM with 40 units expected on a date
+  When I query stock
+  Then the IZM entry shows the expected receipt date and quantity
+{code}",Low,2,b2b-integration e2 sprint-3,VKT Sprint 3
+US-09,E2,Story,US-09 Publish the product catalogue with dealer prices,"As a dealer whose ERP is connected, I want to download the catalogue with my prices, so that my connector can keep its SKU cross-reference up to date.
+
+Traces to: Field mapping rule T6, BR-07
+Verified by: HP-02, HP-03
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Paged catalogue
+  When my connector calls GET /products with pageSize 5
+  Then it gets 5 products with my unit price and a next page token
+
+Scenario: Incremental refresh
+  When it calls GET /products with updatedSince
+  Then only products changed since then are returned, including newly inactive ones
+{code}",High,3,b2b-integration e2 sprint-2,VKT Sprint 2
+US-10,E2,Story,US-10 Rate limits per dealer,"As the integration team, I want each dealer's traffic to be limited per endpoint, so that one dealer's polling cannot slow down the others.
+
+Traces to: RULE-11, NFR-PERF-07
+Verified by: NT-16
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: A dealer exceeds the stock limit
+  Given a dealer sent 60 stock queries in the last minute
+  When it sends one more
+  Then the response is 429 with RATE_LIMIT_EXCEEDED, Retry-After and X-RateLimit-Remaining 0
+  And other dealers are not affected
+{code}",High,3,b2b-integration e2 sprint-2,VKT Sprint 2
+US-11,E3,Story,US-11 Create approval tasks for exceptions,"As a sales representative, I want every credit or stock exception of my dealers to appear in my task queue, so that I decide with all facts in one place instead of on the phone.
+
+Traces to: BR-05, RULE-08, UC-04
+Verified by: HP-09, HP-10
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: A task is created
+  Given an order of my dealer became PENDING_APPROVAL
+  Then a task appears in my queue within 1 minute
+  And it shows the lines, the reason, credit limit, open balance, order total and sellable stock
+  And its due time is 4 business hours later
+{code}",High,5,b2b-integration e3 sprint-3,VKT Sprint 3
+US-12,E3,Story,US-12 Approve or reject an exception,"As a sales representative, I want to approve or reject a pending order with a reason, so that the dealer is told at once and the decision is recorded.
+
+Traces to: BR-05, RULE-09
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Approve
+  When I approve a pending order
+  Then it becomes APPROVED and then ALLOCATED
+  And the decision, my name and the time are recorded
+
+Scenario: Reject
+  When I reject with reason CREDIT_LIMIT_REJECTED and a comment
+  Then the order becomes REJECTED and the dealer receives the reason and comment
+
+Scenario: Double click
+  When I approve the same task twice
+  Then the second action changes nothing
+{code}",High,5,b2b-integration e3 sprint-3,VKT Sprint 3
+US-13,E3,Story,US-13 Approve with reduced quantities,"As a sales representative, I want to approve an order with lower quantities on some lines, so that a dealer gets what is available instead of nothing.
+
+Traces to: BR-12, RULE-09
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Reduced approval
+  When I lower line 2 from 12 to 6 and approve
+  Then the credit and stock checks run again on the new total
+  And the dealer's status event shows requested 12 and approved 6 on line 2
+{code}",Medium,3,b2b-integration e3 sprint-4,VKT Sprint 4
+US-14,E3,Story,US-14 Escalate overdue approvals,"As the sales manager, I want approvals not decided within 4 business hours to come to me, so that no dealer waits for a representative on the road.
+
+Traces to: RULE-08
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Due time passes
+  Given a task is still open 4 business hours after creation
+  Then it is escalated to the sales manager and the representative is informed
+  And business hours exclude Sundays, public holidays and 20:00 to 08:00
+{code}",High,3,b2b-integration e3 sprint-3,VKT Sprint 3
+US-15,E4,Story,US-15 Map invoices to UBL-TR and validate them,"As finance, I want every invoice to be produced as a valid UBL-TR document, so that the integrator never rejects our invoices for format.
+
+Traces to: BR-08, field mapping section 6, NFR-COMP-03
+Verified by: S-04
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: A shipped order is invoiced
+  Given an order is confirmed as SHIPPED
+  When the ERP creates the invoice with its ETTN
+  Then the integration service produces a TEMELFATURA, SATIS document following the field mapping
+  And it passes the UBL-TR 1.2 schema check before sending
+
+Scenario: Local validation fails
+  When the document fails the schema check
+  Then the invoice becomes SEND_FAILED and the integration team gets the validation messages
+{code}",High,8,b2b-integration e4 sprint-4,VKT Sprint 4
+US-16,E4,Story,US-16 Hold invoices for unregistered tax numbers,"As sales support, I want invoices to a dealer whose tax number is not on the GİB list to be held for me, so that I correct the dealer data before the legal deadline.
+
+Traces to: RULE-14, UC-07
+Verified by: S-01, S-02
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Tax number not registered
+  When CheckUser reports the dealer's VKN as not registered
+  Then the invoice becomes HELD and a task is created for sales support
+
+Scenario: Held too long
+  Given an invoice is still held 5 days after the carrier pickup
+  Then finance is alerted (NFR-COMPL-01)
+{code}",High,3,b2b-integration e4 sprint-4,VKT Sprint 4
+US-17,E4,Story,US-17 Send invoices to the integrator and track delivery,"As finance, I want invoices to be sent and followed until they reach the dealer's inbox, so that no invoice is lost or sent twice.
+
+Traces to: BR-08, RULE-15, UC-06
+Verified by: S-03, S-04, S-05, S-06, S-07, S-08
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Normal delivery
+  When SendInvoice returns a receipt
+  Then the status is polled by ETTN every 5 minutes until DELIVERED
+  And the order becomes INVOICED
+
+Scenario: The integrator is unreachable
+  When SendInvoice times out
+  Then it is retried every 5 minutes with the same ETTN, never a new one
+  And the integration team is alerted after 30 minutes
+
+Scenario: A duplicate ETTN
+  When the integrator answers fault 2005 for an ETTN it already holds
+  Then the invoice is treated as accepted and polling continues
+{code}",High,8,b2b-integration e4 sprint-4,VKT Sprint 4
+US-18,E4,Story,US-18 Notify the dealer when an invoice is delivered,"As a dealer whose ERP is connected, I want to be told when an invoice reached my GİB inbox, with its ETTN and my order number, so that my system matches it to the purchase order automatically.
+
+Traces to: BR-09, UC-08
+Verified by: HP-11, HP-12
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Invoice delivered
+  When the integrator reports DELIVERED
+  Then an invoice.issued webhook is sent within 1 hour with ETTN, invoice number, both order numbers and totals
+  And GET /invoices returns the same content
+{code}",High,5,b2b-integration e4 sprint-4,VKT Sprint 4
+US-19,E4,Story,US-19 Acknowledge an invoice match,"As a dealer whose ERP is connected, I want to confirm that I booked an invoice, so that the order is closed and finance sees it matched.
+
+Traces to: BR-14
+Verified by: HP-13, HP-14, HP-15, NT-27
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Acknowledge
+  Given the order is INVOICED
+  When my system calls POST /invoices/{ettn}/acknowledge
+  Then the order becomes CLOSED and a repeat returns the same result
+
+Scenario: Too early
+  Given the invoice is not yet delivered
+  Then the response is 409 with INVALID_STATE
+
+Scenario: No acknowledgement
+  Then the order closes automatically 30 days after INVOICED
+{code}",Low,3,b2b-integration e4 sprint-5,VKT Sprint 5
+US-20,E5,Story,US-20 Deliver signed status webhooks with retries,"As a dealer whose ERP is connected, I want status changes pushed to my system, so that I do not have to poll and I see changes in seconds.
+
+Traces to: BR-06, RULE-16, NFR-SEC-03
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Status change
+  When one of my orders changes status
+  Then an order.status.changed event with eventId, sequence and the new status is posted to my URL within 10 seconds
+  And it carries an HMAC-SHA256 signature and a timestamp
+
+Scenario: My endpoint fails
+  When my endpoint does not answer 2xx within 10 seconds
+  Then the event is retried at 1, 5, 15, 60 and 240 minutes with the same eventId
+  And after the last failure I appear in the daily exception report
+
+Scenario: I answer 410 Gone
+  Then retries stop at once
+{code}",High,8,b2b-integration e5 sprint-3,VKT Sprint 3
+US-21,E5,Story,US-21 Query order status and history,"As a dealer whose ERP is connected, I want to read the current status and history of my orders, so that I can recover missed events or work without webhooks.
+
+Traces to: BR-06, UC-03
+Verified by: HP-06, HP-08, HP-15, NT-19, NT-20
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Read an order
+  When I call GET /orders/{orderId}
+  Then I get the status, lines with approved quantities and prices, and the history with sequence numbers
+
+Scenario: Another dealer's order
+  When I ask for an order of another dealer
+  Then the response is 403 with FORBIDDEN_RESOURCE
+{code}",High,3,b2b-integration e5 sprint-1,VKT Sprint 1
+US-22,E5,Story,US-22 Portal: place an order with live stock,"As a small dealer without an ERP, I want to place an order in the portal and see stock while I type, so that I stop sending Excel files by e-mail.
+
+Traces to: BR-11, UC-01 A3
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Order in the portal
+  Given I am logged in to the dealer portal
+  When I add products from the catalogue, see their sellable stock and submit
+  Then the portal calls the same API and shows the order number
+  And field errors appear next to the field in Turkish
+{code}",Medium,8,b2b-integration e5 sprint-5,VKT Sprint 5
+US-23,E5,Story,US-23 Portal: follow orders and invoices,"As a small dealer without an ERP, I want to see my orders, their status and my invoices in the portal, so that I do not call sales support to ask.
+
+Traces to: BR-11, UC-03 A2, UC-08 A2
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Order list
+  When I open my orders
+  Then I see each order with status, reason and history, newest first
+
+Scenario: Invoice list
+  When I open my invoices
+  Then I see each delivered invoice with ETTN, number, date and amounts
+{code}",Medium,5,b2b-integration e5 sprint-5,VKT Sprint 5
+US-24,E6,Story,US-24 Onboard a dealer,"As sales support, I want a repeatable checklist to connect a dealer, so that a dealer goes from agreement to production in 5 working days.
+
+Traces to: UC-10, NFR-OPS-05
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Connected dealer
+  Given the dealer signed the integration agreement
+  When IT creates the sandbox client and sales support sets price list, warehouse, credit limit and tax data
+  And the dealer registers its webhook URL and passes the sandbox test orders
+  Then IT activates the production client
+
+Scenario: Duplicate tax number
+  When a second dealer record with the same VKN is onboarded
+  Then onboarding is blocked
+{code}",High,5,b2b-integration e6 sprint-5,VKT Sprint 5
+US-25,E6,Story,US-25 Daily exception report,"As the integration team and finance, I want a report every morning of everything stalled, so that problems are fixed before dealers call.
+
+Traces to: BR-10, UC-09
+Verified by: sql/02_daily_exception_report.sql
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: The report is ready
+  Given it is a working day
+  Then by 07:00 the report lists shipped orders without an invoice sent after 1 working day
+  And it lists invoices not delivered within 24 hours of sending
+  And it lists invoices not acknowledged within 5 working days
+  And it lists dealers whose webhooks failed all attempts
+  And it lists late or missing shipment confirmations
+  And each line links to the order, invoice or dealer
+{code}",High,5,b2b-integration e6 sprint-5,VKT Sprint 5
+US-26,E6,Story,US-26 Monitoring dashboards and alerts,"As the integration team, I want dashboards per flow and alerts with clear severity, so that we see problems before dealers do.
+
+Traces to: NFR-OBS-01 to NFR-OBS-04, error scenarios section 7
+Verified by: HP-01
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Alert on an outage
+  When the API health check fails 3 times in a row
+  Then a P1 alert reaches the on-call channel
+
+Scenario: Dashboard
+  When I open the dashboard
+  Then I see request rate, error rate and 95th percentile latency per endpoint, orders by status and age, and webhook success
+{code}",High,5,b2b-integration e6 sprint-6,VKT Sprint 6
+US-27,E6,Story,US-27 Sandbox for dealer connectors,"As a dealer's ERP partner, I want a sandbox with test data and the Postman collection, so that I can build and test the connector without touching production.
+
+Traces to: NFR-PORT-01, NFR-PORT-02
+Verified by: api/postman (all)
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Connector test
+  Given I received sandbox credentials
+  When I run the published Postman collection against the sandbox
+  Then all happy path and negative tests pass
+  And sandbox invoices only reach the integrator's test environment
+{code}",High,5,b2b-integration e6 sprint-1,VKT Sprint 1
+US-28,E6,Story,US-28 Pass the pre-go-live security test,"As IT, I want an external penetration test and an OWASP API review before go-live, so that dealer data is protected from day one.
+
+Traces to: NFR-SEC-08
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Findings closed
+  Given the external test report is received
+  Then every high and critical finding is fixed and retested before the pilot starts
+{code}",High,3,b2b-integration e6 sprint-6,VKT Sprint 6
+SP-01,E4,Task,SP-01 Spike: confirm the integrator's real contract,"As the integration team, I want Köprü e-Belge's actual WSDL, fault codes and state codes, so that the SOAP mapping is built on facts, not assumptions.
+
+Traces to: SOAP open points S1 to S3
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Time-boxed to 2 days
+  Then the result is a comparison of the real contract with api/soap and a list of changes
+{code}",High,2,b2b-integration e4 sprint-1 spike,VKT Sprint 1
+SP-02,E6,Task,SP-02 Spike: reference connector for Logo and SAP Business One,"As the product owner, I want a recommendation whether Vektör builds reference connectors, so that BRD open question Q1 is answered before the pilot.
+
+Traces to: BRD Q1, NFR-COMP-02
+Verified by: Sprint review demo
+
+Acceptance criteria:
+{code:gherkin}
+Scenario: Time-boxed to 2 days
+  Then the result is effort, options and a recommendation with the pilot dealers' partners
+{code}",High,2,b2b-integration e6 sprint-1 spike,VKT Sprint 1

@@ -36,7 +36,7 @@ Returns and cancellations are out of scope for this version.
 | e-Invoice SOAP contract (WSDL) and sample UBL-TR messages | `api/soap/` | Done |
 | Postman collection with tests, sandbox simulator and test report | `api/postman/` | Done |
 | Reconciliation and KPI SQL on synthetic integration data (DuckDB) | `data/`, `sql/`, `scripts/` | Done |
-| Product backlog, sprint plan, JIRA and Confluence screenshots | `agile/` | Planned |
+| Product backlog, sprint plan, JIRA import and Confluence pages; screenshots | `agile/` | Partly done: screenshots pending |
 | Dealer portal wireframes (Figma) | `design/wireframes/` | Planned |
 | One-page report site (EN/TR) | `docs/` | Planned |
 
@@ -68,7 +68,7 @@ b2b-order-invoice-integration/
 ├── sql/                  # load, data quality, exception report, KPIs
 ├── scripts/              # run_sql.py (DuckDB → docs/data)
 ├── requirements.txt      # duckdb
-├── agile/                # backlog, sprint plan, screenshots
+├── agile/                # backlog, sprint plan, JIRA CSV, Confluence pages, screenshots
 └── design/
     └── wireframes/       # Figma exports + link
 ```

@@ -1,0 +1,1446 @@
+{
+  "data_quality": {
+    "file": "sql/01_data_quality.sql",
+    "sql": "-- Step 1: data quality checks. Every check states what it expects; the analysis below is only trusted if all pass.\n\nWITH checks AS (\n    SELECT 1 AS n, 'Orders loaded' AS check_name,\n           (SELECT count(*) FROM orders) AS found, 'more than 0' AS expected,\n           (SELECT count(*) FROM orders) > 0 AS passed\n    UNION ALL\n    SELECT 2, 'Duplicate order ids',\n           (SELECT count(*) - count(DISTINCT order_id) FROM orders), '0', NULL\n    UNION ALL\n    SELECT 3, 'Dealer order number used twice by one dealer (non-rejected orders)',\n           (SELECT count(*) FROM (SELECT dealer_code, dealer_order_no FROM orders WHERE current_status <> 'REJECTED'\n                                  GROUP BY ALL HAVING count(*) > 1)), '0', NULL\n    UNION ALL\n    SELECT 4, 'Order lines without an order',\n           (SELECT count(*) FROM order_lines l ANTI JOIN orders o USING (order_id)), '0', NULL\n    UNION ALL\n    SELECT 5, 'Orders whose line count does not match their lines',\n           (SELECT count(*) FROM orders o\n             WHERE o.line_count <> (SELECT count(*) FROM order_lines l WHERE l.order_id = o.order_id)), '0', NULL\n    UNION ALL\n    SELECT 6, 'Orders whose net amount differs from the sum of their lines',\n           (SELECT count(*) FROM orders o\n             WHERE o.net_amount <> (SELECT sum(line_net) FROM order_lines l WHERE l.order_id = o.order_id)), '0', NULL\n    UNION ALL\n    SELECT 7, 'Orders whose gross amount is not net plus VAT',\n           (SELECT count(*) FROM orders WHERE gross_amount <> net_amount + vat_amount), '0', NULL\n    UNION ALL\n    SELECT 8, 'Orders without RECEIVED as the first status',\n           (SELECT count(*) FROM orders o\n             WHERE NOT EXISTS (SELECT 1 FROM order_status_history h\n                                WHERE h.order_id = o.order_id AND h.sequence = 1 AND h.status = 'RECEIVED')), '0', NULL\n    UNION ALL\n    SELECT 9, 'Orders with gaps in the status sequence',\n           (SELECT count(*) FROM (SELECT order_id FROM order_status_history GROUP BY order_id\n                                  HAVING max(sequence) <> count(*))), '0', NULL\n    UNION ALL\n    SELECT 10, 'Status changes earlier than the previous one',\n           (SELECT count(*) FROM (SELECT occurred_at < lag(occurred_at) OVER (PARTITION BY order_id ORDER BY sequence) AS back\n                                  FROM order_status_history) WHERE back), '0', NULL\n    UNION ALL\n    SELECT 11, 'Current status differs from the last history entry',\n           (SELECT count(*) FROM orders o\n              JOIN (SELECT order_id, arg_max(status, sequence) AS last_status FROM order_status_history GROUP BY order_id) h\n             USING (order_id) WHERE o.current_status <> h.last_status), '0', NULL\n    UNION ALL\n    SELECT 12, 'Shipments for orders that were never allocated',\n           (SELECT count(*) FROM shipments s\n             WHERE NOT EXISTS (SELECT 1 FROM order_status_history h WHERE h.order_id = s.order_id AND h.status = 'ALLOCATED')),\n           '0', NULL\n    UNION ALL\n    SELECT 13, 'Invoices without a confirmed shipment',\n           (SELECT count(*) FROM invoices i LEFT JOIN shipments s USING (order_id) WHERE s.confirmed_at IS NULL), '0', NULL\n    UNION ALL\n    SELECT 14, 'Orders with more than one invoice (RULE-13: one per shipment)',\n           (SELECT count(*) FROM (SELECT order_id FROM invoices GROUP BY order_id HAVING count(*) > 1)), '0', NULL\n    UNION ALL\n    SELECT 15, 'Invoice amounts that differ from the order',\n           (SELECT count(*) FROM invoices i JOIN orders o USING (order_id) WHERE i.gross_amount <> o.gross_amount), '0', NULL\n    UNION ALL\n    SELECT 16, 'Invoices delivered before they were accepted by the integrator',\n           (SELECT count(*) FROM invoices WHERE delivered_at < accepted_at), '0', NULL\n    UNION ALL\n    SELECT 17, 'Acknowledgements for invoices that were not delivered',\n           (SELECT count(*) FROM acknowledgements a JOIN invoices i USING (ettn) WHERE i.delivered_at IS NULL), '0', NULL\n    UNION ALL\n    SELECT 18, 'Webhook events with more than 6 attempts (RULE-16)',\n           (SELECT count(*) FROM (SELECT event_id FROM webhook_deliveries GROUP BY event_id HAVING max(attempt) > 6)), '0', NULL\n    UNION ALL\n    SELECT 19, 'Accepted submissions without an order',\n           (SELECT count(*) FROM order_submissions s\n             WHERE s.result_code IN ('ACCEPTED', 'REPLAYED') AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.order_id = s.order_id)),\n           '0', NULL\n    UNION ALL\n    SELECT 20, 'Orders from suspended dealers after the suspension date',\n           (SELECT count(*) FROM orders o JOIN dealers d USING (dealer_code)\n             WHERE d.suspended_from IS NOT NULL AND CAST(o.received_at AS DATE) >= d.suspended_from), '0', NULL\n)\nSELECT n, check_name, found, expected, coalesce(passed, found = 0) AS passed\nFROM checks\nORDER BY n;",
+    "columns": [
+      "n",
+      "check_name",
+      "found",
+      "expected",
+      "passed"
+    ],
+    "rows": [
+      {
+        "n": 1,
+        "check_name": "Orders loaded",
+        "found": 3306,
+        "expected": "more than 0",
+        "passed": true
+      },
+      {
+        "n": 2,
+        "check_name": "Duplicate order ids",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 3,
+        "check_name": "Dealer order number used twice by one dealer (non-rejected orders)",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 4,
+        "check_name": "Order lines without an order",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 5,
+        "check_name": "Orders whose line count does not match their lines",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 6,
+        "check_name": "Orders whose net amount differs from the sum of their lines",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 7,
+        "check_name": "Orders whose gross amount is not net plus VAT",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 8,
+        "check_name": "Orders without RECEIVED as the first status",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 9,
+        "check_name": "Orders with gaps in the status sequence",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 10,
+        "check_name": "Status changes earlier than the previous one",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 11,
+        "check_name": "Current status differs from the last history entry",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 12,
+        "check_name": "Shipments for orders that were never allocated",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 13,
+        "check_name": "Invoices without a confirmed shipment",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 14,
+        "check_name": "Orders with more than one invoice (RULE-13: one per shipment)",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 15,
+        "check_name": "Invoice amounts that differ from the order",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 16,
+        "check_name": "Invoices delivered before they were accepted by the integrator",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 17,
+        "check_name": "Acknowledgements for invoices that were not delivered",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 18,
+        "check_name": "Webhook events with more than 6 attempts (RULE-16)",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 19,
+        "check_name": "Accepted submissions without an order",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      },
+      {
+        "n": 20,
+        "check_name": "Orders from suspended dealers after the suspension date",
+        "found": 0,
+        "expected": "0",
+        "passed": true
+      }
+    ]
+  },
+  "daily_exception_report": {
+    "file": "sql/02_daily_exception_report.sql",
+    "sql": "-- Step 2: the daily exception report (UC-09, BRD section 7.6), as run on Monday 5 July 2027 at 07:00.\n-- Five groups of items that would otherwise stall silently. Each line names the order, invoice or dealer to act on.\n-- Group 1 reads \"without an invoice\" as \"no invoice accepted by the integrator\", so held and failed invoices are included.\n\nWITH p AS (SELECT * FROM report_params),\nreport_day AS (\n    SELECT c.working_day_index AS idx FROM calendar c, p WHERE c.day = p.report_date\n),\nprevious_working_day AS (\n    SELECT max(c.day) AS day FROM calendar c, p WHERE c.is_working_day AND c.day < p.report_date\n),\n-- 1. Shipped more than one working day ago, no invoice accepted by the integrator\ng1 AS (\n    SELECT '1 Shipped, invoice not sent'                          AS exception_group,\n           s.order_id                                             AS reference,\n           o.dealer_code,\n           CASE WHEN i.ettn IS NULL               THEN 'No invoice created in the ERP'\n                WHEN i.final_state = 'HELD'        THEN 'Invoice held: dealer tax number not on the GİB list'\n                WHEN i.final_state = 'SEND_FAILED' THEN 'Invoice rejected by the integrator, not yet resent'\n                ELSE 'Invoice created, not yet sent' END          AS detail,\n           s.confirmed_at                                         AS since\n    FROM shipments s\n    JOIN orders o USING (order_id)\n    LEFT JOIN invoices i USING (order_id)\n    JOIN calendar c ON c.day = CAST(s.confirmed_at AS DATE)\n    CROSS JOIN report_day r\n    WHERE s.confirmed_at IS NOT NULL\n      AND i.accepted_at IS NULL\n      AND r.idx - c.working_day_index > 1\n),\n-- 2. Sent to the integrator more than 24 hours ago, not delivered\ng2 AS (\n    SELECT '2 Sent, not delivered within 24 hours',\n           i.ettn,\n           i.dealer_code,\n           'Invoice ' || i.invoice_no || ' still ' || i.final_state || ' at Köprü e-Belge',\n           i.accepted_at\n    FROM invoices i, p\n    WHERE i.accepted_at IS NOT NULL\n      AND i.delivered_at IS NULL\n      AND i.accepted_at < p.as_of - INTERVAL 24 HOUR\n),\n-- 3. Delivered, not acknowledged within 5 working days, by dealers whose connector acknowledges invoices\ng3 AS (\n    SELECT '3 Delivered, not acknowledged in 5 working days',\n           i.ettn,\n           i.dealer_code,\n           'Invoice ' || i.invoice_no || ' for dealer order ' || o.dealer_order_no,\n           i.delivered_at\n    FROM invoices i\n    JOIN orders o USING (order_id)\n    JOIN dealers d ON d.dealer_code = i.dealer_code\n    LEFT JOIN acknowledgements a USING (ettn)\n    JOIN calendar c ON c.day = CAST(i.delivered_at AS DATE)\n    CROSS JOIN report_day r\n    WHERE i.delivered_at IS NOT NULL\n      AND a.ettn IS NULL\n      AND d.acknowledges_invoices\n      AND o.channel = 'API'\n      AND o.current_status <> 'CLOSED'           -- orders close automatically 30 days after INVOICED\n      AND r.idx - c.working_day_index > 5\n),\n-- 4. Dealers whose webhook endpoint fails: events exhausted in the last 7 days and the latest attempt still failing\nlast_attempt AS (\n    SELECT dealer_code, arg_max(result, attempted_at) AS last_result\n    FROM webhook_deliveries GROUP BY dealer_code\n),\nexhausted AS (\n    SELECT w.dealer_code, count(*) AS events, min(w.attempted_at) AS first_exhausted_at\n    FROM webhook_deliveries w, p\n    WHERE w.result = 'EXHAUSTED' AND w.attempted_at >= p.as_of - INTERVAL 7 DAY\n    GROUP BY w.dealer_code\n),\ng4 AS (\n    SELECT '4 Webhook endpoint failing',\n           e.dealer_code,\n           e.dealer_code,\n           e.events || ' events failed all 6 attempts; latest attempt ' || l.last_result,\n           e.first_exhausted_at\n    FROM exhausted e JOIN last_attempt l USING (dealer_code)\n    WHERE l.last_result <> 'DELIVERED'\n),\n-- 5. Shipment confirmation late or missing: confirmed yesterday more than 24 hours after pickup, or not confirmed at all\ng5 AS (\n    SELECT '5 Shipment confirmation late or missing',\n           s.order_id,\n           o.dealer_code,\n           CASE WHEN s.confirmed_at IS NULL THEN 'Picked up by the carrier, not confirmed in the ERP'\n                ELSE 'Confirmed ' || round(date_diff('minute', s.carrier_pickup_at, s.confirmed_at) / 60.0, 1)\n                     || ' hours after carrier pickup' END,\n           s.carrier_pickup_at\n    FROM shipments s\n    JOIN orders o USING (order_id)\n    CROSS JOIN p\n    CROSS JOIN previous_working_day y\n    WHERE (s.confirmed_at IS NULL AND s.carrier_pickup_at < p.as_of - INTERVAL 24 HOUR)\n       OR (CAST(s.confirmed_at AS DATE) = y.day AND s.confirmed_at - s.carrier_pickup_at > INTERVAL 24 HOUR)\n),\nall_groups AS (\n    SELECT * FROM g1 UNION ALL SELECT * FROM g2 UNION ALL SELECT * FROM g3\n    UNION ALL SELECT * FROM g4 UNION ALL SELECT * FROM g5\n)\nSELECT a.exception_group, a.reference, a.dealer_code, a.detail,\n       a.since, date_diff('hour', a.since, p.as_of) AS age_hours\nFROM all_groups a, p\nORDER BY a.exception_group, a.since;",
+    "columns": [
+      "exception_group",
+      "reference",
+      "dealer_code",
+      "detail",
+      "since",
+      "age_hours"
+    ],
+    "rows": [
+      {
+        "exception_group": "1 Shipped, invoice not sent",
+        "reference": "VO-2027-004149",
+        "dealer_code": "D00005",
+        "detail": "No invoice created in the ERP",
+        "since": "2027-07-01 15:04:00",
+        "age_hours": 88
+      },
+      {
+        "exception_group": "1 Shipped, invoice not sent",
+        "reference": "VO-2027-004186",
+        "dealer_code": "D00100",
+        "detail": "No invoice created in the ERP",
+        "since": "2027-07-02 15:40:00",
+        "age_hours": 64
+      },
+      {
+        "exception_group": "1 Shipped, invoice not sent",
+        "reference": "VO-2027-004226",
+        "dealer_code": "D00116",
+        "detail": "No invoice created in the ERP",
+        "since": "2027-07-02 16:04:00",
+        "age_hours": 63
+      },
+      {
+        "exception_group": "2 Sent, not delivered within 24 hours",
+        "reference": "6c58c1ff-8810-4023-ba39-26c10bb75e1d",
+        "dealer_code": "D00120",
+        "detail": "Invoice VKT2027000004205 still AT_INTEGRATOR at Köprü e-Belge",
+        "since": "2027-07-02 14:37:14",
+        "age_hours": 65
+      },
+      {
+        "exception_group": "2 Sent, not delivered within 24 hours",
+        "reference": "b784c77a-3e15-458d-ac3a-72fdfa4217da",
+        "dealer_code": "D00025",
+        "detail": "Invoice VKT2027000004217 still AT_INTEGRATOR at Köprü e-Belge",
+        "since": "2027-07-02 15:29:11",
+        "age_hours": 64
+      },
+      {
+        "exception_group": "3 Delivered, not acknowledged in 5 working days",
+        "reference": "c886f0d8-109e-4b86-9d66-32aa638046bb",
+        "dealer_code": "D00104",
+        "detail": "Invoice VKT2027000003157 for dealer order SIP-2027-00047",
+        "since": "2027-06-05 14:51:44",
+        "age_hours": 713
+      },
+      {
+        "exception_group": "3 Delivered, not acknowledged in 5 working days",
+        "reference": "b57ee6a6-b2ea-403e-9468-26f61fa910c3",
+        "dealer_code": "D00085",
+        "detail": "Invoice VKT2027000003202 for dealer order SIP-2027-00033",
+        "since": "2027-06-07 17:07:17",
+        "age_hours": 662
+      },
+      {
+        "exception_group": "3 Delivered, not acknowledged in 5 working days",
+        "reference": "69963964-77e9-4ef8-838d-3d6cc9c13e6f",
+        "dealer_code": "D00044",
+        "detail": "Invoice VKT2027000003367 for dealer order PO-2027-00042",
+        "since": "2027-06-10 14:56:08",
+        "age_hours": 593
+      },
+      {
+        "exception_group": "3 Delivered, not acknowledged in 5 working days",
+        "reference": "e2c3c786-bf7c-4d09-b3f0-7d43edab40cc",
+        "dealer_code": "D00116",
+        "detail": "Invoice VKT2027000003419 for dealer order PO-2027-00066",
+        "since": "2027-06-11 17:05:00",
+        "age_hours": 566
+      },
+      {
+        "exception_group": "3 Delivered, not acknowledged in 5 working days",
+        "reference": "7bac57d2-ab66-40c3-885b-e0f7b20526cd",
+        "dealer_code": "D00041",
+        "detail": "Invoice VKT2027000003872 for dealer order SIP-2027-00079",
+        "since": "2027-06-23 14:22:58",
+        "age_hours": 281
+      },
+      {
+        "exception_group": "3 Delivered, not acknowledged in 5 working days",
+        "reference": "e6e2f1f8-22d0-43f8-b886-d60053ac50b8",
+        "dealer_code": "D00087",
+        "detail": "Invoice VKT2027000004039 for dealer order PO-2027-00067",
+        "since": "2027-06-28 15:06:11",
+        "age_hours": 160
+      },
+      {
+        "exception_group": "4 Webhook endpoint failing",
+        "reference": "D00087",
+        "dealer_code": "D00087",
+        "detail": "2 events failed all 6 attempts; latest attempt EXHAUSTED",
+        "since": "2027-07-02 16:45:14",
+        "age_hours": 63
+      },
+      {
+        "exception_group": "5 Shipment confirmation late or missing",
+        "reference": "VO-2027-004239",
+        "dealer_code": "D00064",
+        "detail": "Picked up by the carrier, not confirmed in the ERP",
+        "since": "2027-07-03 15:40:00",
+        "age_hours": 40
+      },
+      {
+        "exception_group": "5 Shipment confirmation late or missing",
+        "reference": "VO-2027-004278",
+        "dealer_code": "D00087",
+        "detail": "Picked up by the carrier, not confirmed in the ERP",
+        "since": "2027-07-03 15:50:00",
+        "age_hours": 40
+      }
+    ]
+  },
+  "kpi_channel_adoption": {
+    "file": "sql/03_kpi_channel_adoption.sql",
+    "sql": "-- Step 3: G1, remove manual order entry. Share of order lines received through the API or the dealer portal, per week.\n-- Target: at least 80% of order lines, six months after go-live (BRD section 4).\n\nSELECT c.period_week                                                       AS week,\n       p.period_start + 7 * (c.period_week - 1)                            AS week_start,\n       sum(o.line_count)                                                   AS order_lines,\n       sum(o.line_count) FILTER (WHERE o.channel = 'API')                  AS api_lines,\n       sum(o.line_count) FILTER (WHERE o.channel = 'PORTAL')               AS portal_lines,\n       sum(o.line_count) FILTER (WHERE o.channel = 'MANUAL')               AS manual_lines,\n       round(100.0 * sum(o.line_count) FILTER (WHERE o.channel <> 'MANUAL') / sum(o.line_count), 1)\n                                                                           AS integrated_share_pct,\n       count(DISTINCT o.dealer_code) FILTER (WHERE o.channel <> 'MANUAL')  AS dealers_ordering_integrated,\n       80                                                                  AS target_pct\nFROM orders o\nJOIN calendar c ON c.day = CAST(o.received_at AS DATE)\nCROSS JOIN report_params p\nGROUP BY c.period_week, p.period_start\nORDER BY week;",
+    "columns": [
+      "week",
+      "week_start",
+      "order_lines",
+      "api_lines",
+      "portal_lines",
+      "manual_lines",
+      "integrated_share_pct",
+      "dealers_ordering_integrated",
+      "target_pct"
+    ],
+    "rows": [
+      {
+        "week": 1,
+        "week_start": "2027-04-05",
+        "order_lines": 2181,
+        "api_lines": 186,
+        "portal_lines": null,
+        "manual_lines": 1995,
+        "integrated_share_pct": 8.5,
+        "dealers_ordering_integrated": 4,
+        "target_pct": 80
+      },
+      {
+        "week": 2,
+        "week_start": "2027-04-12",
+        "order_lines": 2627,
+        "api_lines": 503,
+        "portal_lines": 2,
+        "manual_lines": 2122,
+        "integrated_share_pct": 19.2,
+        "dealers_ordering_integrated": 9,
+        "target_pct": 80
+      },
+      {
+        "week": 3,
+        "week_start": "2027-04-19",
+        "order_lines": 1935,
+        "api_lines": 526,
+        "portal_lines": 28,
+        "manual_lines": 1381,
+        "integrated_share_pct": 28.6,
+        "dealers_ordering_integrated": 13,
+        "target_pct": 80
+      },
+      {
+        "week": 4,
+        "week_start": "2027-04-26",
+        "order_lines": 2005,
+        "api_lines": 574,
+        "portal_lines": 53,
+        "manual_lines": 1378,
+        "integrated_share_pct": 31.3,
+        "dealers_ordering_integrated": 18,
+        "target_pct": 80
+      },
+      {
+        "week": 5,
+        "week_start": "2027-05-03",
+        "order_lines": 2417,
+        "api_lines": 612,
+        "portal_lines": 92,
+        "manual_lines": 1713,
+        "integrated_share_pct": 29.1,
+        "dealers_ordering_integrated": 20,
+        "target_pct": 80
+      },
+      {
+        "week": 6,
+        "week_start": "2027-05-10",
+        "order_lines": 2237,
+        "api_lines": 805,
+        "portal_lines": 154,
+        "manual_lines": 1278,
+        "integrated_share_pct": 42.9,
+        "dealers_ordering_integrated": 29,
+        "target_pct": 80
+      },
+      {
+        "week": 7,
+        "week_start": "2027-05-17",
+        "order_lines": 1050,
+        "api_lines": 424,
+        "portal_lines": 61,
+        "manual_lines": 565,
+        "integrated_share_pct": 46.2,
+        "dealers_ordering_integrated": 25,
+        "target_pct": 80
+      },
+      {
+        "week": 8,
+        "week_start": "2027-05-24",
+        "order_lines": 2275,
+        "api_lines": 1058,
+        "portal_lines": 181,
+        "manual_lines": 1036,
+        "integrated_share_pct": 54.5,
+        "dealers_ordering_integrated": 40,
+        "target_pct": 80
+      },
+      {
+        "week": 9,
+        "week_start": "2027-05-31",
+        "order_lines": 2261,
+        "api_lines": 1396,
+        "portal_lines": 171,
+        "manual_lines": 694,
+        "integrated_share_pct": 69.3,
+        "dealers_ordering_integrated": 41,
+        "target_pct": 80
+      },
+      {
+        "week": 10,
+        "week_start": "2027-06-07",
+        "order_lines": 2202,
+        "api_lines": 1264,
+        "portal_lines": 221,
+        "manual_lines": 717,
+        "integrated_share_pct": 67.4,
+        "dealers_ordering_integrated": 50,
+        "target_pct": 80
+      },
+      {
+        "week": 11,
+        "week_start": "2027-06-14",
+        "order_lines": 2249,
+        "api_lines": 1447,
+        "portal_lines": 277,
+        "manual_lines": 525,
+        "integrated_share_pct": 76.7,
+        "dealers_ordering_integrated": 55,
+        "target_pct": 80
+      },
+      {
+        "week": 12,
+        "week_start": "2027-06-21",
+        "order_lines": 2263,
+        "api_lines": 1488,
+        "portal_lines": 263,
+        "manual_lines": 512,
+        "integrated_share_pct": 77.4,
+        "dealers_ordering_integrated": 56,
+        "target_pct": 80
+      },
+      {
+        "week": 13,
+        "week_start": "2027-06-28",
+        "order_lines": 2170,
+        "api_lines": 1393,
+        "portal_lines": 262,
+        "manual_lines": 515,
+        "integrated_share_pct": 76.3,
+        "dealers_ordering_integrated": 58,
+        "target_pct": 80
+      }
+    ]
+  },
+  "kpi_order_corrections": {
+    "file": "sql/04_kpi_order_corrections.sql",
+    "sql": "-- Step 4: G2, reduce order errors. Orders corrected in the ERP after entry, per week and channel.\n-- Baseline 4% of orders, target below 0.5%. Integrated orders are validated at the source; manual ones are keyed by hand.\n\nSELECT c.period_week                                                                  AS week,\n       count(*)                                                                       AS orders,\n       count(*) FILTER (WHERE o.corrected_after_entry)                                AS corrected,\n       round(100.0 * count(*) FILTER (WHERE o.corrected_after_entry) / count(*), 2)   AS corrected_pct,\n       round(100.0 * count(*) FILTER (WHERE o.corrected_after_entry AND o.channel <> 'MANUAL')\n             / nullif(count(*) FILTER (WHERE o.channel <> 'MANUAL'), 0), 2)           AS corrected_pct_integrated,\n       round(100.0 * count(*) FILTER (WHERE o.corrected_after_entry AND o.channel = 'MANUAL')\n             / nullif(count(*) FILTER (WHERE o.channel = 'MANUAL'), 0), 2)            AS corrected_pct_manual,\n       0.5                                                                            AS target_pct\nFROM orders o\nJOIN calendar c ON c.day = CAST(o.received_at AS DATE)\nGROUP BY c.period_week\nORDER BY week;",
+    "columns": [
+      "week",
+      "orders",
+      "corrected",
+      "corrected_pct",
+      "corrected_pct_integrated",
+      "corrected_pct_manual",
+      "target_pct"
+    ],
+    "rows": [
+      {
+        "week": 1,
+        "orders": 257,
+        "corrected": 8,
+        "corrected_pct": 3.11,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 3.33,
+        "target_pct": 0.5
+      },
+      {
+        "week": 2,
+        "orders": 286,
+        "corrected": 13,
+        "corrected_pct": 4.55,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 5.35,
+        "target_pct": 0.5
+      },
+      {
+        "week": 3,
+        "orders": 232,
+        "corrected": 7,
+        "corrected_pct": 3.02,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 3.89,
+        "target_pct": 0.5
+      },
+      {
+        "week": 4,
+        "orders": 239,
+        "corrected": 5,
+        "corrected_pct": 2.09,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 2.79,
+        "target_pct": 0.5
+      },
+      {
+        "week": 5,
+        "orders": 292,
+        "corrected": 2,
+        "corrected_pct": 0.68,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 0.92,
+        "target_pct": 0.5
+      },
+      {
+        "week": 6,
+        "orders": 258,
+        "corrected": 5,
+        "corrected_pct": 1.94,
+        "corrected_pct_integrated": 1.04,
+        "corrected_pct_manual": 2.47,
+        "target_pct": 0.5
+      },
+      {
+        "week": 7,
+        "orders": 123,
+        "corrected": 2,
+        "corrected_pct": 1.63,
+        "corrected_pct_integrated": 2.08,
+        "corrected_pct_manual": 1.33,
+        "target_pct": 0.5
+      },
+      {
+        "week": 8,
+        "orders": 271,
+        "corrected": 8,
+        "corrected_pct": 2.95,
+        "corrected_pct_integrated": 1.48,
+        "corrected_pct_manual": 4.41,
+        "target_pct": 0.5
+      },
+      {
+        "week": 9,
+        "orders": 268,
+        "corrected": 4,
+        "corrected_pct": 1.49,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 3.48,
+        "target_pct": 0.5
+      },
+      {
+        "week": 10,
+        "orders": 274,
+        "corrected": 3,
+        "corrected_pct": 1.09,
+        "corrected_pct_integrated": 0.63,
+        "corrected_pct_manual": 1.74,
+        "target_pct": 0.5
+      },
+      {
+        "week": 11,
+        "orders": 272,
+        "corrected": 1,
+        "corrected_pct": 0.37,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 1.15,
+        "target_pct": 0.5
+      },
+      {
+        "week": 12,
+        "orders": 267,
+        "corrected": 5,
+        "corrected_pct": 1.87,
+        "corrected_pct_integrated": 0.0,
+        "corrected_pct_manual": 6.1,
+        "target_pct": 0.5
+      },
+      {
+        "week": 13,
+        "orders": 267,
+        "corrected": 2,
+        "corrected_pct": 0.75,
+        "corrected_pct_integrated": 0.57,
+        "corrected_pct_manual": 1.09,
+        "target_pct": 0.5
+      }
+    ]
+  },
+  "kpi_decision_time": {
+    "file": "sql/05_kpi_decision_time.sql",
+    "sql": "-- Step 5: G3, faster acknowledgement. Time from RECEIVED to the first decision, and approval tasks against their\n-- due time of 4 business hours (RULE-08). Targets: under 2 minutes for automatic decisions, approvals within due.\n\nWITH first_decision AS (\n    SELECT d.order_id, r.occurred_at AS received_at, d.occurred_at AS decided_at, d.status,\n           date_diff('millisecond', r.occurred_at, d.occurred_at) / 1000.0 AS seconds\n    FROM order_status_history d\n    JOIN order_status_history r ON r.order_id = d.order_id AND r.sequence = 1\n    WHERE d.sequence = 2\n),\nerp_incident AS (\n    SELECT started_at, ended_at FROM incidents WHERE system = 'ERP'\n),\ntasks AS (\n    SELECT *, decided_at <= due_at AS on_time FROM approval_tasks WHERE decided_at IS NOT NULL\n)\nSELECT 1 AS n, 'Orders with a first decision' AS metric, count(*)::DOUBLE AS value, 'orders' AS unit, '' AS target\nFROM first_decision\nUNION ALL\nSELECT 2, 'Median time to the first decision', round(median(seconds), 1), 'seconds', '' FROM first_decision\nUNION ALL\nSELECT 3, '95th percentile time to the first decision', round(quantile_cont(seconds, 0.95), 1), 'seconds',\n       'under 60 (NFR-PERF-04)' FROM first_decision\nUNION ALL\nSELECT 4, 'First decision within 2 minutes', round(100.0 * avg((seconds <= 120)::INTEGER), 2), '% of orders',\n       '100 (G3)' FROM first_decision\nUNION ALL\nSELECT 5, 'Orders received during the ERP incident', count(*), 'orders', ''\nFROM first_decision f, erp_incident e WHERE f.received_at >= e.started_at AND f.received_at < e.ended_at\nUNION ALL\nSELECT 6, 'Longest wait for a decision during the ERP incident', round(max(f.seconds) / 60, 1), 'minutes', ''\nFROM first_decision f, erp_incident e WHERE f.received_at >= e.started_at AND f.received_at < e.ended_at\nUNION ALL\nSELECT 7, 'Orders sent to approval', count(*), 'orders', '' FROM approval_tasks\nUNION ALL\nSELECT 8, 'Approval tasks decided within 4 business hours', round(100.0 * avg(on_time::INTEGER), 1), '% of tasks',\n       '100 (RULE-08)' FROM tasks\nUNION ALL\nSELECT 9, 'Approval tasks escalated to the sales manager', count(*) FILTER (WHERE escalated_at IS NOT NULL), 'tasks', ''\nFROM approval_tasks\nUNION ALL\nSELECT 10, 'Median clock time to an approval decision', round(median(date_diff('minute', created_at, decided_at)) / 60.0, 1),\n       'hours', '' FROM tasks\nUNION ALL\nSELECT 11, 'Approvals on time, credit limit cases', round(100.0 * avg(on_time::INTEGER) FILTER (WHERE reason_code = 'CREDIT_LIMIT'), 1),\n       '% of tasks', '' FROM tasks\nUNION ALL\nSELECT 12, 'Approvals on time, partial stock cases', round(100.0 * avg(on_time::INTEGER) FILTER (WHERE reason_code = 'PARTIAL_STOCK'), 1),\n       '% of tasks', '' FROM tasks\nORDER BY n;",
+    "columns": [
+      "n",
+      "metric",
+      "value",
+      "unit",
+      "target"
+    ],
+    "rows": [
+      {
+        "n": 1,
+        "metric": "Orders with a first decision",
+        "value": 3306.0,
+        "unit": "orders",
+        "target": ""
+      },
+      {
+        "n": 2,
+        "metric": "Median time to the first decision",
+        "value": 7.0,
+        "unit": "seconds",
+        "target": ""
+      },
+      {
+        "n": 3,
+        "metric": "95th percentile time to the first decision",
+        "value": 39.0,
+        "unit": "seconds",
+        "target": "under 60 (NFR-PERF-04)"
+      },
+      {
+        "n": 4,
+        "metric": "First decision within 2 minutes",
+        "value": 99.46,
+        "unit": "% of orders",
+        "target": "100 (G3)"
+      },
+      {
+        "n": 5,
+        "metric": "Orders received during the ERP incident",
+        "value": 12.0,
+        "unit": "orders",
+        "target": ""
+      },
+      {
+        "n": 6,
+        "metric": "Longest wait for a decision during the ERP incident",
+        "value": 91.1,
+        "unit": "minutes",
+        "target": ""
+      },
+      {
+        "n": 7,
+        "metric": "Orders sent to approval",
+        "value": 383.0,
+        "unit": "orders",
+        "target": ""
+      },
+      {
+        "n": 8,
+        "metric": "Approval tasks decided within 4 business hours",
+        "value": 85.1,
+        "unit": "% of tasks",
+        "target": "100 (RULE-08)"
+      },
+      {
+        "n": 9,
+        "metric": "Approval tasks escalated to the sales manager",
+        "value": 57.0,
+        "unit": "tasks",
+        "target": ""
+      },
+      {
+        "n": 10,
+        "metric": "Median clock time to an approval decision",
+        "value": 1.4,
+        "unit": "hours",
+        "target": ""
+      },
+      {
+        "n": 11,
+        "metric": "Approvals on time, credit limit cases",
+        "value": 81.0,
+        "unit": "% of tasks",
+        "target": ""
+      },
+      {
+        "n": 12,
+        "metric": "Approvals on time, partial stock cases",
+        "value": 88.9,
+        "unit": "% of tasks",
+        "target": ""
+      }
+    ]
+  },
+  "kpi_stock_self_service": {
+    "file": "sql/06_kpi_stock_self_service.sql",
+    "sql": "-- Step 6: G4, self-service stock. Stock questions by phone (sales support tally) against stock queries through\n-- the API and the portal, per working day. Baseline about 60 phone questions a day, target below 6.\n\nSELECT s.week_start,\n       s.working_days,\n       round(s.phone_stock_questions / s.working_days, 1)  AS phone_stock_questions_per_day,\n       round(sum(t.requests) / s.working_days)             AS stock_queries_per_day,\n       round(s.order_status_calls / s.working_days, 1)     AS order_status_calls_per_day,\n       6                                                   AS target_phone_per_day\nFROM support_tally_weekly s\nJOIN api_daily_traffic t\n  ON t.endpoint = 'GET /stock' AND t.day >= s.week_start AND t.day < s.week_start + 7\nGROUP BY s.week_start, s.working_days, s.phone_stock_questions, s.order_status_calls\nORDER BY s.week_start;",
+    "columns": [
+      "week_start",
+      "working_days",
+      "phone_stock_questions_per_day",
+      "stock_queries_per_day",
+      "order_status_calls_per_day",
+      "target_phone_per_day"
+    ],
+    "rows": [
+      {
+        "week_start": "2027-04-05",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 64.3,
+        "stock_queries_per_day": 74.0,
+        "order_status_calls_per_day": 24.2,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-04-12",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 53.2,
+        "stock_queries_per_day": 218.0,
+        "order_status_calls_per_day": 23.3,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-04-19",
+        "working_days": 5,
+        "phone_stock_questions_per_day": 52.4,
+        "stock_queries_per_day": 318.0,
+        "order_status_calls_per_day": 23.8,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-04-26",
+        "working_days": 5,
+        "phone_stock_questions_per_day": 48.8,
+        "stock_queries_per_day": 446.0,
+        "order_status_calls_per_day": 21.6,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-05-03",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 48.5,
+        "stock_queries_per_day": 445.0,
+        "order_status_calls_per_day": 19.3,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-05-10",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 46.3,
+        "stock_queries_per_day": 584.0,
+        "order_status_calls_per_day": 21.8,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-05-17",
+        "working_days": 3,
+        "phone_stock_questions_per_day": 42.0,
+        "stock_queries_per_day": 595.0,
+        "order_status_calls_per_day": 16.3,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-05-24",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 40.7,
+        "stock_queries_per_day": 758.0,
+        "order_status_calls_per_day": 15.2,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-05-31",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 35.5,
+        "stock_queries_per_day": 885.0,
+        "order_status_calls_per_day": 14.7,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-06-07",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 31.7,
+        "stock_queries_per_day": 962.0,
+        "order_status_calls_per_day": 13.7,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-06-14",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 27.7,
+        "stock_queries_per_day": 1018.0,
+        "order_status_calls_per_day": 14.2,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-06-21",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 31.0,
+        "stock_queries_per_day": 1024.0,
+        "order_status_calls_per_day": 12.3,
+        "target_phone_per_day": 6
+      },
+      {
+        "week_start": "2027-06-28",
+        "working_days": 6,
+        "phone_stock_questions_per_day": 26.2,
+        "stock_queries_per_day": 1094.0,
+        "order_status_calls_per_day": 10.7,
+        "target_phone_per_day": 6
+      }
+    ]
+  },
+  "kpi_invoice_cycle": {
+    "file": "sql/07_kpi_invoice_cycle.sql",
+    "sql": "-- Step 7: G5, faster invoice matching. From shipment confirmation to the e-Invoice in the dealer's GİB inbox, and from\n-- delivery to the invoice.issued webhook. Baseline 1.5 working days; target same day, notification within 1 hour.\n\nWITH delivered AS (\n    SELECT i.order_id, i.delivered_at, s.confirmed_at, c.period_week,\n           date_diff('minute', s.confirmed_at, i.delivered_at) / 60.0    AS hours_to_inbox,\n           CAST(i.delivered_at AS DATE) = CAST(s.confirmed_at AS DATE)    AS same_day\n    FROM invoices i\n    JOIN shipments s USING (order_id)\n    JOIN calendar c ON c.day = CAST(s.confirmed_at AS DATE)\n    WHERE i.delivered_at IS NOT NULL\n),\nwebhook AS (\n    SELECT order_id, min(attempted_at) FILTER (WHERE result = 'DELIVERED') AS notified_at\n    FROM webhook_deliveries\n    WHERE event_type = 'invoice.issued'\n    GROUP BY order_id\n)\nSELECT d.period_week                                                   AS week,\n       count(*)                                                        AS invoices_delivered,\n       round(100.0 * avg(d.same_day::INTEGER), 1)                      AS same_day_pct,\n       round(median(d.hours_to_inbox), 2)                              AS median_hours,\n       round(quantile_cont(d.hours_to_inbox, 0.95), 2)                 AS p95_hours,\n       count(w.order_id)                                               AS webhook_notifications,\n       round(100.0 * avg((w.notified_at <= d.delivered_at + INTERVAL 1 HOUR)::INTEGER)\n             FILTER (WHERE w.order_id IS NOT NULL), 1)                 AS notified_within_1h_pct\nFROM delivered d\nLEFT JOIN webhook w USING (order_id)\nGROUP BY d.period_week\nORDER BY week;",
+    "columns": [
+      "week",
+      "invoices_delivered",
+      "same_day_pct",
+      "median_hours",
+      "p95_hours",
+      "webhook_notifications",
+      "notified_within_1h_pct"
+    ],
+    "rows": [
+      {
+        "week": 1,
+        "invoices_delivered": 225,
+        "same_day_pct": 99.1,
+        "median_hours": 0.23,
+        "p95_hours": 0.72,
+        "webhook_notifications": 13,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 2,
+        "invoices_delivered": 285,
+        "same_day_pct": 99.6,
+        "median_hours": 0.22,
+        "p95_hours": 0.64,
+        "webhook_notifications": 39,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 3,
+        "invoices_delivered": 233,
+        "same_day_pct": 99.1,
+        "median_hours": 0.22,
+        "p95_hours": 0.62,
+        "webhook_notifications": 47,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 4,
+        "invoices_delivered": 211,
+        "same_day_pct": 98.6,
+        "median_hours": 0.22,
+        "p95_hours": 0.76,
+        "webhook_notifications": 47,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 5,
+        "invoices_delivered": 290,
+        "same_day_pct": 98.6,
+        "median_hours": 0.23,
+        "p95_hours": 0.69,
+        "webhook_notifications": 51,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 6,
+        "invoices_delivered": 267,
+        "same_day_pct": 99.3,
+        "median_hours": 0.23,
+        "p95_hours": 0.78,
+        "webhook_notifications": 66,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 7,
+        "invoices_delivered": 112,
+        "same_day_pct": 99.1,
+        "median_hours": 0.25,
+        "p95_hours": 0.57,
+        "webhook_notifications": 29,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 8,
+        "invoices_delivered": 270,
+        "same_day_pct": 99.6,
+        "median_hours": 0.22,
+        "p95_hours": 0.73,
+        "webhook_notifications": 89,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 9,
+        "invoices_delivered": 257,
+        "same_day_pct": 99.2,
+        "median_hours": 0.23,
+        "p95_hours": 0.72,
+        "webhook_notifications": 104,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 10,
+        "invoices_delivered": 269,
+        "same_day_pct": 99.3,
+        "median_hours": 0.25,
+        "p95_hours": 1.89,
+        "webhook_notifications": 111,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 11,
+        "invoices_delivered": 269,
+        "same_day_pct": 99.6,
+        "median_hours": 0.22,
+        "p95_hours": 0.72,
+        "webhook_notifications": 124,
+        "notified_within_1h_pct": 99.2
+      },
+      {
+        "week": 12,
+        "invoices_delivered": 252,
+        "same_day_pct": 99.6,
+        "median_hours": 0.22,
+        "p95_hours": 0.53,
+        "webhook_notifications": 119,
+        "notified_within_1h_pct": 100.0
+      },
+      {
+        "week": 13,
+        "invoices_delivered": 250,
+        "same_day_pct": 100.0,
+        "median_hours": 0.22,
+        "p95_hours": 0.66,
+        "webhook_notifications": 107,
+        "notified_within_1h_pct": 100.0
+      }
+    ]
+  },
+  "kpi_reconciliation": {
+    "file": "sql/08_kpi_reconciliation.sql",
+    "sql": "-- Step 8: G6, fewer reconciliation issues. Invoices the dealer's ERP booked with a different total, per month.\n-- Baseline about 45 mismatches a month with PDF invoices; target below 5. July covers only the first days.\n\nSELECT strftime(i.delivered_at, '%Y-%m')                                   AS month,\n       count(*)                                                            AS invoices_delivered,\n       count(a.ettn)                                                       AS acknowledged,\n       count(a.ettn) FILTER (WHERE a.match_result = 'MISMATCH')            AS mismatches,\n       sum(abs(a.dealer_booked_gross - i.gross_amount))\n           FILTER (WHERE a.match_result = 'MISMATCH')                      AS mismatch_amount_try,\n       5                                                                   AS target_max_per_month\nFROM invoices i\nLEFT JOIN acknowledgements a USING (ettn)\nWHERE i.delivered_at IS NOT NULL\nGROUP BY month\nORDER BY month;",
+    "columns": [
+      "month",
+      "invoices_delivered",
+      "acknowledged",
+      "mismatches",
+      "mismatch_amount_try",
+      "target_max_per_month"
+    ],
+    "rows": [
+      {
+        "month": "2027-04",
+        "invoices_delivered": 954,
+        "acknowledged": 135,
+        "mismatches": 0,
+        "mismatch_amount_try": null,
+        "target_max_per_month": 5
+      },
+      {
+        "month": "2027-05",
+        "invoices_delivered": 967,
+        "acknowledged": 228,
+        "mismatches": 1,
+        "mismatch_amount_try": 0.02,
+        "target_max_per_month": 5
+      },
+      {
+        "month": "2027-06",
+        "invoices_delivered": 1143,
+        "acknowledged": 460,
+        "mismatches": 1,
+        "mismatch_amount_try": 0.01,
+        "target_max_per_month": 5
+      },
+      {
+        "month": "2027-07",
+        "invoices_delivered": 126,
+        "acknowledged": 38,
+        "mismatches": 0,
+        "mismatch_amount_try": null,
+        "target_max_per_month": 5
+      }
+    ]
+  },
+  "ops_webhook_delivery": {
+    "file": "sql/09_ops_webhook_delivery.sql",
+    "sql": "-- Step 9: webhook delivery (RULE-16). Per week: events created, delivered at the first attempt, delivered after\n-- retries, and events that failed all 6 attempts (first attempt plus retries at 1, 5, 15, 60 and 240 minutes).\n\nWITH events AS (\n    SELECT event_id, dealer_code,\n           min(event_created_at)                AS created_at,\n           max(attempt)                         AS attempts,\n           bool_or(result = 'DELIVERED')        AS delivered,\n           bool_or(result = 'EXHAUSTED')        AS exhausted\n    FROM webhook_deliveries\n    GROUP BY event_id, dealer_code\n)\nSELECT c.period_week                                                          AS week,\n       count(*)                                                               AS events,\n       round(100.0 * avg((e.delivered AND e.attempts = 1)::INTEGER), 2)       AS first_attempt_pct,\n       count(*) FILTER (WHERE e.delivered AND e.attempts > 1)                 AS delivered_after_retry,\n       count(*) FILTER (WHERE e.exhausted)                                    AS exhausted,\n       string_agg(DISTINCT e.dealer_code, ', ') FILTER (WHERE e.exhausted)    AS dealers_exhausted,\n       count(*) FILTER (WHERE NOT e.delivered AND NOT e.exhausted)            AS still_retrying\nFROM events e\nJOIN calendar c ON c.day = CAST(e.created_at AS DATE)\nGROUP BY c.period_week\nORDER BY week;",
+    "columns": [
+      "week",
+      "events",
+      "first_attempt_pct",
+      "delivered_after_retry",
+      "exhausted",
+      "dealers_exhausted",
+      "still_retrying"
+    ],
+    "rows": [
+      {
+        "week": 1,
+        "events": 87,
+        "first_attempt_pct": 98.85,
+        "delivered_after_retry": 1,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 2,
+        "events": 235,
+        "first_attempt_pct": 99.57,
+        "delivered_after_retry": 1,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 3,
+        "events": 286,
+        "first_attempt_pct": 98.95,
+        "delivered_after_retry": 3,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 4,
+        "events": 282,
+        "first_attempt_pct": 97.52,
+        "delivered_after_retry": 7,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 5,
+        "events": 317,
+        "first_attempt_pct": 99.05,
+        "delivered_after_retry": 3,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 6,
+        "events": 399,
+        "first_attempt_pct": 97.24,
+        "delivered_after_retry": 11,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 7,
+        "events": 173,
+        "first_attempt_pct": 98.84,
+        "delivered_after_retry": 2,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 8,
+        "events": 547,
+        "first_attempt_pct": 97.44,
+        "delivered_after_retry": 14,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 9,
+        "events": 638,
+        "first_attempt_pct": 97.02,
+        "delivered_after_retry": 19,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 10,
+        "events": 664,
+        "first_attempt_pct": 97.89,
+        "delivered_after_retry": 14,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 11,
+        "events": 734,
+        "first_attempt_pct": 94.96,
+        "delivered_after_retry": 16,
+        "exhausted": 21,
+        "dealers_exhausted": "D00031",
+        "still_retrying": 0
+      },
+      {
+        "week": 12,
+        "events": 731,
+        "first_attempt_pct": 98.36,
+        "delivered_after_retry": 12,
+        "exhausted": 0,
+        "dealers_exhausted": null,
+        "still_retrying": 0
+      },
+      {
+        "week": 13,
+        "events": 652,
+        "first_attempt_pct": 98.31,
+        "delivered_after_retry": 9,
+        "exhausted": 2,
+        "dealers_exhausted": "D00087",
+        "still_retrying": 0
+      }
+    ]
+  },
+  "ops_order_submissions": {
+    "file": "sql/10_ops_order_submissions.sql",
+    "sql": "-- Step 10: order submissions by result (error scenarios, section 3). Shows which error codes dealers actually meet,\n-- and how often idempotency protects against duplicates (REPLAYED: same key and body, original response returned).\n\nSELECT channel,\n       result_code,\n       http_status,\n       coalesce(field_error_code, '')                                              AS field_error_code,\n       count(*)                                                                    AS submissions,\n       round(100.0 * count(*) / sum(count(*)) OVER (PARTITION BY channel), 2)      AS share_of_channel_pct\nFROM order_submissions\nGROUP BY channel, result_code, http_status, coalesce(field_error_code, '')\nORDER BY channel, submissions DESC;",
+    "columns": [
+      "channel",
+      "result_code",
+      "http_status",
+      "field_error_code",
+      "submissions",
+      "share_of_channel_pct"
+    ],
+    "rows": [
+      {
+        "channel": "API",
+        "result_code": "ACCEPTED",
+        "http_status": 202,
+        "field_error_code": "",
+        "submissions": 1048,
+        "share_of_channel_pct": 92.91
+      },
+      {
+        "channel": "API",
+        "result_code": "REPLAYED",
+        "http_status": 202,
+        "field_error_code": "",
+        "submissions": 14,
+        "share_of_channel_pct": 1.24
+      },
+      {
+        "channel": "API",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "DATE_OUT_OF_RANGE",
+        "submissions": 12,
+        "share_of_channel_pct": 1.06
+      },
+      {
+        "channel": "API",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "INVALID_UNIT",
+        "submissions": 11,
+        "share_of_channel_pct": 0.98
+      },
+      {
+        "channel": "API",
+        "result_code": "UNAUTHORIZED",
+        "http_status": 401,
+        "field_error_code": "",
+        "submissions": 9,
+        "share_of_channel_pct": 0.8
+      },
+      {
+        "channel": "API",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "FIELD_REQUIRED",
+        "submissions": 9,
+        "share_of_channel_pct": 0.8
+      },
+      {
+        "channel": "API",
+        "result_code": "DUPLICATE_DEALER_ORDER_NO",
+        "http_status": 409,
+        "field_error_code": "",
+        "submissions": 7,
+        "share_of_channel_pct": 0.62
+      },
+      {
+        "channel": "API",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "QUANTITY_NOT_INTEGER",
+        "submissions": 6,
+        "share_of_channel_pct": 0.53
+      },
+      {
+        "channel": "API",
+        "result_code": "RATE_LIMIT_EXCEEDED",
+        "http_status": 429,
+        "field_error_code": "",
+        "submissions": 4,
+        "share_of_channel_pct": 0.35
+      },
+      {
+        "channel": "API",
+        "result_code": "REQUEST_IN_PROGRESS",
+        "http_status": 409,
+        "field_error_code": "",
+        "submissions": 4,
+        "share_of_channel_pct": 0.35
+      },
+      {
+        "channel": "API",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "DUPLICATE_LINE_SKU",
+        "submissions": 2,
+        "share_of_channel_pct": 0.18
+      },
+      {
+        "channel": "API",
+        "result_code": "IDEMPOTENCY_KEY_REUSED",
+        "http_status": 422,
+        "field_error_code": "",
+        "submissions": 2,
+        "share_of_channel_pct": 0.18
+      },
+      {
+        "channel": "PORTAL",
+        "result_code": "ACCEPTED",
+        "http_status": 202,
+        "field_error_code": "",
+        "submissions": 335,
+        "share_of_channel_pct": 97.38
+      },
+      {
+        "channel": "PORTAL",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "FIELD_REQUIRED",
+        "submissions": 3,
+        "share_of_channel_pct": 0.87
+      },
+      {
+        "channel": "PORTAL",
+        "result_code": "DUPLICATE_DEALER_ORDER_NO",
+        "http_status": 409,
+        "field_error_code": "",
+        "submissions": 2,
+        "share_of_channel_pct": 0.58
+      },
+      {
+        "channel": "PORTAL",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "INVALID_UNIT",
+        "submissions": 2,
+        "share_of_channel_pct": 0.58
+      },
+      {
+        "channel": "PORTAL",
+        "result_code": "REQUEST_IN_PROGRESS",
+        "http_status": 409,
+        "field_error_code": "",
+        "submissions": 1,
+        "share_of_channel_pct": 0.29
+      },
+      {
+        "channel": "PORTAL",
+        "result_code": "VALIDATION_FAILED",
+        "http_status": 400,
+        "field_error_code": "QUANTITY_NOT_INTEGER",
+        "submissions": 1,
+        "share_of_channel_pct": 0.29
+      }
+    ]
+  },
+  "ops_invoice_delivery": {
+    "file": "sql/11_ops_invoice_delivery.sql",
+    "sql": "-- Step 11: how each invoice reached the dealer (UC-06), and the legal deadline. Under VUK article 231/5 an invoice is\n-- issued within 7 days of delivery; the integration alerts on day 5 (NFR-COMPL-01). Invoices are counted by their path.\n\nWITH calls AS (\n    SELECT ettn,\n           count(*) FILTER (WHERE result = 'TIMEOUT')                                         AS timeouts,\n           count(*) FILTER (WHERE operation = 'SendInvoice' AND result = 'FAULT')             AS send_faults,\n           count(*) FILTER (WHERE operation = 'GetInvoiceStatus' AND status_returned = 'ERROR') AS delivery_errors\n    FROM integrator_calls\n    GROUP BY ettn\n),\nclassified AS (\n    SELECT i.*, s.confirmed_at, s.carrier_pickup_at,\n           CASE WHEN i.final_state <> 'DELIVERED'                    THEN 'Open at report time: ' || i.final_state\n                WHEN i.held_at IS NOT NULL                           THEN 'Delivered after a tax number hold'\n                WHEN coalesce(c.send_faults, 0) > 0                  THEN 'Delivered after a rejected send was fixed'\n                WHEN coalesce(c.delivery_errors, 0) > 0              THEN 'Delivered after a delivery error and resend'\n                WHEN coalesce(c.timeouts, 0) > 0                     THEN 'Delivered after the integrator incident'\n                WHEN s.confirmed_at - s.carrier_pickup_at > INTERVAL 24 HOUR THEN 'Delivered after a late shipment confirmation'\n                WHEN i.created_at - s.confirmed_at > INTERVAL 1 DAY  THEN 'Delivered, invoice created late in the ERP'\n                WHEN i.delivered_at - i.accepted_at > INTERVAL 24 HOUR THEN 'Delivered, more than 24 hours at the integrator'\n                ELSE 'Delivered first time' END                        AS outcome,\n           date_diff('day', CAST(s.carrier_pickup_at AS DATE),       -- the goods left with the carrier\n                     CAST(coalesce(i.delivered_at, p.as_of) AS DATE))   AS days_from_shipment\n    FROM invoices i\n    JOIN shipments s USING (order_id)\n    LEFT JOIN calls c USING (ettn)\n    CROSS JOIN report_params p\n)\nSELECT outcome,\n       count(*)                                                     AS invoices,\n       round(100.0 * count(*) / sum(count(*)) OVER (), 2)           AS share_pct,\n       round(median(date_diff('minute', confirmed_at, delivered_at)) / 60.0, 2) AS median_hours_to_inbox,\n       count(*) FILTER (WHERE days_from_shipment >= 5)              AS reached_day5_alert,\n       count(*) FILTER (WHERE days_from_shipment > 7)               AS beyond_7_day_limit\nFROM classified\nGROUP BY outcome\nORDER BY invoices DESC;",
+    "columns": [
+      "outcome",
+      "invoices",
+      "share_pct",
+      "median_hours_to_inbox",
+      "reached_day5_alert",
+      "beyond_7_day_limit"
+    ],
+    "rows": [
+      {
+        "outcome": "Delivered first time",
+        "invoices": 3073,
+        "share_pct": 96.27,
+        "median_hours_to_inbox": 0.22,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered after a late shipment confirmation",
+        "invoices": 54,
+        "share_pct": 1.69,
+        "median_hours_to_inbox": 0.2,
+        "reached_day5_alert": 3,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered after the integrator incident",
+        "invoices": 30,
+        "share_pct": 0.94,
+        "median_hours_to_inbox": 1.47,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered after a rejected send was fixed",
+        "invoices": 14,
+        "share_pct": 0.44,
+        "median_hours_to_inbox": 3.3,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered after a delivery error and resend",
+        "invoices": 9,
+        "share_pct": 0.28,
+        "median_hours_to_inbox": 20.18,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered after a tax number hold",
+        "invoices": 5,
+        "share_pct": 0.16,
+        "median_hours_to_inbox": 42.35,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered, invoice created late in the ERP",
+        "invoices": 3,
+        "share_pct": 0.09,
+        "median_hours_to_inbox": 96.15,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Delivered, more than 24 hours at the integrator",
+        "invoices": 2,
+        "share_pct": 0.06,
+        "median_hours_to_inbox": 31.97,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      },
+      {
+        "outcome": "Open at report time: AT_INTEGRATOR",
+        "invoices": 2,
+        "share_pct": 0.06,
+        "median_hours_to_inbox": null,
+        "reached_day5_alert": 0,
+        "beyond_7_day_limit": 0
+      }
+    ]
+  },
+  "ops_incidents": {
+    "file": "sql/12_ops_incidents.sql",
+    "sql": "-- Step 12: the two incidents of the period and their effect. NFR-REL-04 and NFR-REL-05 require that an ERP or an\n-- integrator outage delays work but loses nothing: every affected order and invoice must have been processed afterwards.\n\nWITH erp AS (\n    SELECT n.incident_id,\n           count(*)                                                                    AS affected,\n           max(date_diff('second', r.occurred_at, d.occurred_at)) / 60.0               AS longest_delay_minutes,\n           count(*) FILTER (WHERE d.order_id IS NULL)                                  AS not_processed\n    FROM incidents n\n    JOIN order_status_history r ON r.sequence = 1 AND r.occurred_at >= n.started_at AND r.occurred_at < n.ended_at\n    LEFT JOIN order_status_history d ON d.order_id = r.order_id AND d.sequence = 2\n    WHERE n.system = 'ERP'\n    GROUP BY n.incident_id\n),\nintegrator AS (\n    SELECT n.incident_id,\n           count(DISTINCT c.ettn)                                                      AS affected,\n           max(date_diff('second', i.created_at, i.accepted_at)) / 60.0                AS longest_delay_minutes,\n           count(DISTINCT c.ettn) FILTER (WHERE i.accepted_at IS NULL)                 AS not_processed\n    FROM incidents n\n    JOIN integrator_calls c ON c.result = 'TIMEOUT' AND c.called_at >= n.started_at AND c.called_at < n.ended_at\n    JOIN invoices i USING (ettn)\n    WHERE n.system = 'INTEGRATOR'\n    GROUP BY n.incident_id\n),\neffects AS (\n    SELECT *, 'orders waiting for a first decision' AS affected_unit FROM erp\n    UNION ALL\n    SELECT *, 'invoices waiting to be sent' FROM integrator\n)\nSELECT n.incident_id, n.system, n.started_at, n.ended_at,\n       date_diff('minute', n.started_at, n.ended_at)    AS duration_minutes,\n       n.description,\n       e.affected, e.affected_unit,\n       round(e.longest_delay_minutes, 1)                AS longest_delay_minutes,\n       e.not_processed\nFROM incidents n\nJOIN effects e USING (incident_id)\nORDER BY n.started_at;",
+    "columns": [
+      "incident_id",
+      "system",
+      "started_at",
+      "ended_at",
+      "duration_minutes",
+      "description",
+      "affected",
+      "affected_unit",
+      "longest_delay_minutes",
+      "not_processed"
+    ],
+    "rows": [
+      {
+        "incident_id": "INC-2027-014",
+        "system": "ERP",
+        "started_at": "2027-05-11 10:05:00",
+        "ended_at": "2027-05-11 11:50:00",
+        "duration_minutes": 105,
+        "description": "ERP database failover; business rules could not read credit and stock data",
+        "affected": 12,
+        "affected_unit": "orders waiting for a first decision",
+        "longest_delay_minutes": 91.1,
+        "not_processed": 0
+      },
+      {
+        "incident_id": "INC-2027-022",
+        "system": "INTEGRATOR",
+        "started_at": "2027-06-08 14:00:00",
+        "ended_at": "2027-06-08 16:10:00",
+        "duration_minutes": 130,
+        "description": "Köprü e-Belge SOAP service unreachable after a certificate change on the integrator side",
+        "affected": 30,
+        "affected_unit": "invoices waiting to be sent",
+        "longest_delay_minutes": 135.4,
+        "not_processed": 0
+      }
+    ]
+  },
+  "kpi_scorecard": {
+    "file": "sql/13_kpi_scorecard.sql",
+    "sql": "-- Step 13: scorecard of the six BRD goals over the last four weeks of the period (weeks 10 to 13, 7 June to 3 July).\n-- G1 has a six-month target date; the others apply from go-live. Status compares the result with the target.\n\nWITH p AS (SELECT * FROM report_params),\nrecent AS (\n    SELECT day FROM calendar WHERE period_week BETWEEN 10 AND 13\n),\nworking_days AS (\n    SELECT count(*) AS n FROM calendar WHERE period_week BETWEEN 10 AND 13 AND is_working_day\n),\ng1 AS (\n    SELECT round(100.0 * sum(line_count) FILTER (WHERE channel <> 'MANUAL') / sum(line_count), 1) AS v\n    FROM orders WHERE CAST(received_at AS DATE) IN (SELECT day FROM recent)\n),\ng2 AS (\n    SELECT round(100.0 * avg(corrected_after_entry::INTEGER), 2) AS v,\n           round(100.0 * avg(corrected_after_entry::INTEGER) FILTER (WHERE channel <> 'MANUAL'), 2) AS v_integrated\n    FROM orders WHERE CAST(received_at AS DATE) IN (SELECT day FROM recent)\n),\ng3 AS (\n    SELECT round(quantile_cont(date_diff('millisecond', r.occurred_at, d.occurred_at) / 1000.0, 0.95), 1) AS p95_seconds\n    FROM order_status_history d\n    JOIN order_status_history r ON r.order_id = d.order_id AND r.sequence = 1\n    WHERE d.sequence = 2 AND CAST(r.occurred_at AS DATE) IN (SELECT day FROM recent)\n),\ng3_tasks AS (\n    SELECT round(100.0 * avg((decided_at <= due_at)::INTEGER), 1) AS on_time_pct\n    FROM approval_tasks WHERE decided_at IS NOT NULL AND CAST(created_at AS DATE) IN (SELECT day FROM recent)\n),\ng4 AS (\n    SELECT round(sum(phone_stock_questions) / sum(working_days), 1) AS v\n    FROM support_tally_weekly WHERE week_start IN (SELECT day FROM recent)\n),\ng5 AS (\n    SELECT round(100.0 * avg((CAST(i.delivered_at AS DATE) = CAST(s.confirmed_at AS DATE))::INTEGER), 1) AS same_day_pct,\n           round(median(date_diff('minute', s.confirmed_at, i.delivered_at)) / 60.0, 2)            AS median_hours\n    FROM invoices i JOIN shipments s USING (order_id)\n    WHERE i.delivered_at IS NOT NULL AND CAST(s.confirmed_at AS DATE) IN (SELECT day FROM recent)\n),\ng6 AS (\n    SELECT count(*) AS v FROM acknowledgements\n    WHERE match_result = 'MISMATCH' AND strftime(acknowledged_at, '%Y-%m') = '2027-06'\n)\nSELECT 'G1' AS goal, 'Order lines received through the API or the portal' AS metric,\n       '0%' AS baseline, 'at least 80% by October 2027' AS target,\n       g1.v || '%' AS result,\n       CASE WHEN g1.v >= 80 THEN 'Met' ELSE 'On the way; target date not reached' END AS status\nFROM g1\nUNION ALL\nSELECT 'G2', 'Orders corrected after entry', '4%', 'below 0.5%',\n       g2.v || '% overall, ' || g2.v_integrated || '% for integrated orders',\n       CASE WHEN g2.v < 0.5 THEN 'Met' WHEN g2.v_integrated < 0.5 THEN 'Met for integrated orders only' ELSE 'Not met' END\nFROM g2\nUNION ALL\nSELECT 'G3', 'Time to first status; approvals within 4 business hours', 'about 1 working day',\n       'under 2 minutes; approvals within 4 business hours',\n       'p95 ' || g3.p95_seconds || ' s; ' || g3_tasks.on_time_pct || '% of approvals on time',\n       CASE WHEN g3.p95_seconds < 120 AND g3_tasks.on_time_pct >= 100 THEN 'Met'\n            WHEN g3.p95_seconds < 120 THEN 'Met for automatic decisions; approvals miss the 4-hour target'\n            ELSE 'Not met' END\nFROM g3, g3_tasks\nUNION ALL\nSELECT 'G4', 'Stock questions by phone per working day', 'about 60', 'below 6',\n       g4.v || ' a day', CASE WHEN g4.v < 6 THEN 'Met' ELSE 'Not met' END\nFROM g4\nUNION ALL\nSELECT 'G5', 'Invoice in the dealer''s inbox on the day of shipment', '1.5 working days', 'same day',\n       g5.same_day_pct || '% same day, median ' || g5.median_hours || ' hours',\n       CASE WHEN g5.same_day_pct >= 95 THEN 'Met' ELSE 'Not met' END\nFROM g5\nUNION ALL\nSELECT 'G6', 'Reconciliation mismatches in June 2027', 'about 45 a month', 'below 5 a month',\n       g6.v || ' in June', CASE WHEN g6.v < 5 THEN 'Met' ELSE 'Not met' END\nFROM g6;",
+    "columns": [
+      "goal",
+      "metric",
+      "baseline",
+      "target",
+      "result",
+      "status"
+    ],
+    "rows": [
+      {
+        "goal": "G1",
+        "metric": "Order lines received through the API or the portal",
+        "baseline": "0%",
+        "target": "at least 80% by October 2027",
+        "result": "74.5%",
+        "status": "On the way; target date not reached"
+      },
+      {
+        "goal": "G2",
+        "metric": "Orders corrected after entry",
+        "baseline": "4%",
+        "target": "below 0.5%",
+        "result": "1.02% overall, 0.28% for integrated orders",
+        "status": "Met for integrated orders only"
+      },
+      {
+        "goal": "G3",
+        "metric": "Time to first status; approvals within 4 business hours",
+        "baseline": "about 1 working day",
+        "target": "under 2 minutes; approvals within 4 business hours",
+        "result": "p95 39.0 s; 86.6% of approvals on time",
+        "status": "Met for automatic decisions; approvals miss the 4-hour target"
+      },
+      {
+        "goal": "G4",
+        "metric": "Stock questions by phone per working day",
+        "baseline": "about 60",
+        "target": "below 6",
+        "result": "29.1 a day",
+        "status": "Not met"
+      },
+      {
+        "goal": "G5",
+        "metric": "Invoice in the dealer's inbox on the day of shipment",
+        "baseline": "1.5 working days",
+        "target": "same day",
+        "result": "99.6% same day, median 0.22 hours",
+        "status": "Met"
+      },
+      {
+        "goal": "G6",
+        "metric": "Reconciliation mismatches in June 2027",
+        "baseline": "about 45 a month",
+        "target": "below 5 a month",
+        "result": "1 in June",
+        "status": "Met"
+      }
+    ]
+  }
+}

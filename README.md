@@ -35,7 +35,7 @@ Returns and cancellations are out of scope for this version.
 | OpenAPI specification for the dealer API (orders, stock, products, invoices, webhooks) | `api/openapi/vektor-dealer-api.v1.yaml` | Done |
 | e-Invoice SOAP contract (WSDL) and sample UBL-TR messages | `api/soap/` | Done |
 | Postman collection with tests, sandbox simulator and test report | `api/postman/` | Done |
-| Reconciliation SQL on synthetic integration data (DuckDB) | `sql/`, `scripts/` | Planned |
+| Reconciliation and KPI SQL on synthetic integration data (DuckDB) | `data/`, `sql/`, `scripts/` | Done |
 | Product backlog, sprint plan, JIRA and Confluence screenshots | `agile/` | Planned |
 | Dealer portal wireframes (Figma) | `design/wireframes/` | Planned |
 | One-page report site (EN/TR) | `docs/` | Planned |
@@ -45,7 +45,7 @@ Returns and cancellations are out of scope for this version.
 - **Documents** are Markdown files under `analysis/`, written in the order a real project would produce them.
 - **Diagrams**: UML diagrams are Mermaid text files under `diagrams/uml/`, rendered directly by GitHub. BPMN diagrams are draw.io files under `diagrams/bpmn/` with PNG exports.
 - **API contracts**: the REST side is an OpenAPI 3 file under `api/openapi/`; the SOAP side is a WSDL with sample UBL-TR XML under `api/soap/`. The Postman collection under `api/postman/` exercises both.
-- **SQL**: `sql/` builds a small synthetic dataset of orders, invoices and integration logs, then runs reconciliation queries. `scripts/run_sql.py` executes them with DuckDB and writes the results as JSON into `docs/data/` for the site. No build step.
+- **Data and SQL**: `data/generate_data.py` creates 13 weeks of synthetic orders, invoices and integration logs with problems planted at known rates. `sql/` loads them into DuckDB and produces the daily exception report, the six BRD goal measures and an operational view. `scripts/run_sql.py` runs the queries and writes the results as JSON into `docs/data/` for the site. No build step.
 - **Site**: `docs/` is plain HTML, CSS and JavaScript with Chart.js, the same approach as the [Telco Customer Churn Analysis](https://github.com/surakaraali/telco-churn-analysis) project.
 
 ## Repository layout
@@ -61,11 +61,13 @@ b2b-order-invoice-integration/
 │   ├── bpmn/             # .drawio + .png
 │   └── uml/              # .mmd (Mermaid)
 ├── api/
-│   ├── openapi/          # order and stock API (OpenAPI 3)
+│   ├── openapi/          # dealer API (OpenAPI 3.1)
 │   ├── soap/             # e-Invoice WSDL + sample UBL-TR XML
-│   └── postman/          # collection + environment
-├── sql/                  # schema, seed, reconciliation queries
+│   └── postman/          # collection, environments, simulator, test report
+├── data/                 # generate_data.py + raw/*.csv (synthetic, 13 weeks)
+├── sql/                  # load, data quality, exception report, KPIs
 ├── scripts/              # run_sql.py (DuckDB → docs/data)
+├── requirements.txt      # duckdb
 ├── agile/                # backlog, sprint plan, screenshots
 └── design/
     └── wireframes/       # Figma exports + link

@@ -1,0 +1,3 @@
+incident_id,system,started_at,ended_at,description
+INC-2027-014,ERP,2027-05-11 10:05:00,2027-05-11 11:50:00,ERP database failover; business rules could not read credit and stock data
+INC-2027-022,INTEGRATOR,2027-06-08 14:00:00,2027-06-08 16:10:00,Köprü e-Belge SOAP service unreachable after a certificate change on the integrator side

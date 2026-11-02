@@ -1,0 +1,29 @@
+sku,name,category,unit_code,minimum_order_quantity,vat_rate,unit_price,status
+100234,VX-55Q 55-inch 4K television,Television,C62,2,20,18450.00,ACTIVE
+100235,VX-65Q 65-inch 4K television,Television,C62,1,20,27900.00,ACTIVE
+100236,VX-43F 43-inch Full HD television,Television,C62,2,20,11990.00,ACTIVE
+100237,VX-50Q 50-inch 4K television,Television,C62,2,20,15490.00,ACTIVE
+100238,VX-75Q 75-inch 4K television,Television,C62,1,20,41900.00,ACTIVE
+200117,VX-300 soundbar,Audio,C62,4,20,2890.00,ACTIVE
+200118,VX-500 soundbar with subwoofer,Audio,C62,2,20,5490.00,ACTIVE
+200120,S1 Bluetooth speaker,Audio,C62,6,20,1290.00,ACTIVE
+200121,E2 wireless earbuds,Audio,C62,6,20,1690.00,ACTIVE
+200122,H5 over-ear headphones,Audio,C62,4,20,3290.00,ACTIVE
+300410,KT-17 1.7 L kettle,Small appliances,C62,6,20,899.00,ACTIVE
+300411,TS-2 toaster,Small appliances,C62,6,20,1190.00,ACTIVE
+300412,BL-8 blender,Small appliances,C62,4,20,1690.00,ACTIVE
+300413,AF-5 air fryer,Small appliances,C62,4,20,3490.00,ACTIVE
+300414,VS-1 stick vacuum,Small appliances,C62,2,20,6490.00,ACTIVE
+300415,SI-3 steam iron,Small appliances,C62,6,20,1390.00,ACTIVE
+300555,KT-15 1.5 L kettle (discontinued),Small appliances,C62,6,20,749.00,INACTIVE
+400020,"HDMI 2.1 cable, 2 m",Accessories,C62,10,20,149.90,ACTIVE
+400021,Tilting wall mount 32-65 inch,Accessories,C62,5,20,549.00,ACTIVE
+400022,Surge protected power strip,Accessories,C62,10,20,399.00,ACTIVE
+400023,Universal remote control,Accessories,C62,10,20,329.00,ACTIVE
+400024,65 W USB-C charger,Accessories,C62,10,20,449.00,ACTIVE
+500100,BR-1 barista set,Small appliances,SET,1,20,12990.00,ACTIVE
+600100,KB-2 wireless keyboard,Peripherals,C62,5,20,799.00,ACTIVE
+600101,MS-1 wireless mouse,Peripherals,C62,10,20,449.00,ACTIVE
+600102,WC-4 full HD webcam,Peripherals,C62,4,20,1590.00,ACTIVE
+600103,MN-27 27-inch monitor,Peripherals,C62,2,20,8990.00,ACTIVE
+600104,RT-6 Wi-Fi 6 router,Peripherals,C62,4,20,2190.00,ACTIVE

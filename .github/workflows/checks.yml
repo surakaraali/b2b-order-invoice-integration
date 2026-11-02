@@ -1,0 +1,82 @@
+# Runs on every push: the synthetic data must be reproducible, every SQL data quality check must pass,
+# and the Postman collection must pass against the sandbox simulator.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  data-and-sql:
+    name: Data and SQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install DuckDB
+        run: pip install -r requirements.txt
+
+      - name: Regenerate the synthetic data and check that it is unchanged
+        run: |
+          python data/generate_data.py
+          git diff --exit-code -- data/raw
+
+      - name: Run the SQL
+        run: python scripts/run_sql.py
+
+      - name: Check that every data quality check passes
+        run: |
+          python - <<'PY'
+          import json, sys
+          results = json.load(open("docs/data/results.json", encoding="utf-8"))
+          checks = results["data_quality"]["rows"]
+          failed = [c["check_name"] for c in checks if not c["passed"]]
+          print(f"{len(checks) - len(failed)} of {len(checks)} data quality checks passed")
+          for name in failed:
+              print("FAILED:", name)
+          exceptions = results["daily_exception_report"]["rows"]
+          print(f"daily exception report: {len(exceptions)} lines")
+          sys.exit(1 if failed else 0)
+          PY
+
+  api-tests:
+    name: Postman tests against the simulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Start the sandbox simulator
+        run: |
+          python api/postman/simulator/sandbox_simulator.py --port 8040 > simulator.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8040/v1/health && exit 0
+            sleep 0.5
+          done
+          echo "The simulator did not start" && cat simulator.log && exit 1
+
+      - name: Run the collection with Newman
+        run: >
+          npx --yes newman@6.2.3 run api/postman/vektor-dealer-api.postman_collection.json
+          -e api/postman/environments/local-simulator.postman_environment.json
+          --reporters cli --color off
+
+      - name: Show the simulator log
+        if: failure()
+        run: cat simulator.log

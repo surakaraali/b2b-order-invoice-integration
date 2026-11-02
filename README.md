@@ -1,5 +1,7 @@
 # B2B Order, Stock and Invoice Integration Analysis
 
+[![Checks](https://github.com/surakaraali/b2b-order-invoice-integration/actions/workflows/checks.yml/badge.svg)](https://github.com/surakaraali/b2b-order-invoice-integration/actions/workflows/checks.yml)
+
 **Live site: [surakaraali.github.io/b2b-order-invoice-integration](https://surakaraali.github.io/b2b-order-invoice-integration/)** · [API explorer](https://surakaraali.github.io/b2b-order-invoice-integration/api.html)
 
 By **Sura Karaali**, [LinkedIn](https://www.linkedin.com/in/surakaraali/)
@@ -48,6 +50,7 @@ Two outages, one in the ERP and one at the integrator, delayed work by up to two
 | Product backlog, sprint plan, JIRA import and Confluence pages | `agile/` | Done; JIRA and Confluence screenshots still to be added |
 | Dealer portal wireframes (draw.io, PNG, SVG for Figma) | `design/wireframes/` | Done |
 | One-page report site (EN/TR) and API explorer | `docs/` | Done |
+| Automated checks on every push (GitHub Actions) | `.github/workflows/checks.yml` | Done |
 
 ## How it works
 
@@ -57,6 +60,7 @@ Two outages, one in the ERP and one at the integrator, delayed work by up to two
 - **Tests**: the Postman collection under `api/postman/` covers the happy path, the negative tests of the error scenarios and the SOAP calls. It runs with Newman against `simulator/sandbox_simulator.py`, a standard library Python test double of the dealer API and the integrator.
 - **Data and SQL**: `data/generate_data.py` creates 13 weeks of synthetic orders, invoices and integration logs with problems planted at known rates. `sql/` loads them into DuckDB and produces the daily exception report, the six BRD goal measures and an operational view. `scripts/run_sql.py` runs the queries and writes the results as JSON into `docs/data/` for the site.
 - **Site**: `docs/` is plain HTML, CSS and JavaScript with Chart.js, the same approach as the [Telco Customer Churn Analysis](https://github.com/surakaraali/telco-churn-analysis) project. `scripts/sync_site_assets.py` copies the diagrams, wireframes and the OpenAPI file into `docs/assets/`, because GitHub Pages publishes only `docs/`. No build step.
+- **Checks**: on every push, GitHub Actions regenerates the data and checks that it is unchanged, runs the SQL and requires every data quality check to pass, and runs the Postman collection against the simulator.
 
 ## Running it locally
 
@@ -104,6 +108,7 @@ b2b-order-invoice-integration/
 ├── agile/                # backlog, sprint plan, JIRA CSV, Confluence pages, screenshots
 ├── design/
 │   └── wireframes/       # five portal and approval screens: .drawio, .png, .svg
+├── .github/workflows/    # checks.yml
 └── requirements.txt      # duckdb
 ```
 

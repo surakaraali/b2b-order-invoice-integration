@@ -130,6 +130,31 @@ function render() {
   fillTimeline();
   fillWireframes();
   fillQueryPanels();
+  keepHyphenatedWords(document.body);
+}
+
+// Keep short hyphenated words such as "e-Fatura", "e-posta" or "UBL-TR'ye" on one line;
+// browsers otherwise break the line right after the hyphen.
+const HYPHENATED = /[\p{L}\p{N}]{1,6}-[\p{L}\p{N}’]{1,14}/gu;
+function keepHyphenatedWords(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: node => (node.parentElement.closest('code, pre, .nowrap') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  for (const node of textNodes) {
+    const text = node.nodeValue;
+    const matches = [...text.matchAll(HYPHENATED)];
+    if (!matches.length) continue;
+    const parts = document.createDocumentFragment();
+    let last = 0;
+    for (const match of matches) {
+      parts.append(text.slice(last, match.index), el('span', 'nowrap', match[0]));
+      last = match.index + match[0].length;
+    }
+    parts.append(text.slice(last));
+    node.replaceWith(parts);
+  }
 }
 
 const rows = name => results[name].rows;

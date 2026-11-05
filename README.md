@@ -47,10 +47,16 @@ Two outages, one in the ERP and one at the integrator, delayed work by up to two
 | e-Invoice SOAP contract (WSDL) and sample UBL-TR messages | `api/soap/` | Done |
 | Postman collection with tests, sandbox simulator and test report | `api/postman/` | Done |
 | Reconciliation and KPI SQL on synthetic integration data (DuckDB) | `data/`, `sql/`, `scripts/` | Done |
-| Product backlog, sprint plan, JIRA import and Confluence pages | `agile/` | Done; JIRA and Confluence screenshots still to be added |
+| Product backlog, sprint plan, JIRA import and Confluence pages | `agile/` | Done; imported into JIRA Cloud and Confluence, see the screenshots |
 | Dealer portal wireframes (draw.io, PNG, SVG for Figma) | `design/wireframes/` | Done |
 | One-page report site (EN/TR) and API explorer | `docs/` | Done |
 | Automated checks on every push (GitHub Actions) | `.github/workflows/checks.yml` | Done |
+
+## The plan in JIRA
+
+The backlog was imported into JIRA Cloud: 6 epics, 28 stories and 2 spikes in six sprints, with Sprint 1 started. The Confluence space holds the project overview, the requirements index and the decision log. All six screenshots are in [`agile/README.md`](agile/README.md#result).
+
+![JIRA backlog with the sprints](agile/screenshots/01_jira_backlog.png)
 
 ## How it works
 
@@ -114,4 +120,4 @@ b2b-order-invoice-integration/
 
 ## Status
 
-Started October 2026. The analysis, the API contracts, the tests, the data and SQL, the plan, the wireframes and the site are complete. Still open: importing the backlog into JIRA Cloud and Confluence and adding the screenshots listed in `agile/README.md`.
+Started October 2026 and complete: the analysis, the API contracts, the tests, the data and SQL, the plan in JIRA and Confluence, the wireframes and the site.

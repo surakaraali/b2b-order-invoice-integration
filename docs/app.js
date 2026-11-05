@@ -11,6 +11,7 @@ const MERMAID_URL = 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/12.1.0/merma
 const UML = ['seq_01_submit_order', 'seq_02_query_stock', 'seq_03_issue_einvoice',
   'seq_04_webhook_delivery', 'state_01_order', 'state_02_invoice'];
 const WIREFRAMES = ['01_order_entry', '02_order_list', '03_order_detail', '04_invoices', '05_approval_task'];
+const SCREENSHOTS = ['01_jira_backlog', '02_jira_board_sprint1', '03_jira_timeline', '04_jira_story_us03', '05_confluence_overview', '06_confluence_decision_log'];
 const TIMELINE = ['s1', 's2', 's3', 's4', 's5', 's6', 'pilot', 'golive'];
 
 let lang = pickLanguage();
@@ -338,19 +339,24 @@ function fillTimeline() {
   }));
 }
 
-function fillWireframes() {
-  document.getElementById('wireframes').replaceChildren(...WIREFRAMES.map(name => {
+function fillGallery(id, folder, names, prefix) {
+  document.getElementById(id).replaceChildren(...names.map(name => {
     const figure = el('figure');
     const link = el('a');
-    link.href = `assets/wireframes/${name}.png`;
+    link.href = `assets/${folder}/${name}.png`;
     const img = el('img');
-    img.src = `assets/wireframes/${name}.png`;
-    img.alt = t(`wf.${name}`);
+    img.src = `assets/${folder}/${name}.png`;
+    img.alt = t(`${prefix}.${name}`);
     img.loading = 'lazy';
     link.append(img);
-    figure.append(link, el('figcaption', null, t(`wf.${name}`)));
+    figure.append(link, el('figcaption', null, t(`${prefix}.${name}`)));
     return figure;
   }));
+}
+
+function fillWireframes() {
+  fillGallery('wireframes', 'wireframes', WIREFRAMES, 'wf');
+  fillGallery('screenshots', 'screenshots', SCREENSHOTS, 'shot');
 }
 
 function fillQueryPanels() {

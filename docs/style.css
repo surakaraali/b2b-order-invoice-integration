@@ -316,6 +316,7 @@ code { font-family: var(--mono); font-size: 0.88em; }
 .wireframes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
 .wireframes figure { margin: 0; }
 .wireframes img { display: block; width: 100%; height: auto; border: 1px solid var(--hairline); border-radius: 6px; background: #fff; }
+.wireframes.shots { grid-template-columns: repeat(2, 1fr); }
 .wireframes figcaption { font-size: 13.5px; font-weight: 500; color: var(--text-secondary); margin: 8px 0 0; }
 
 @media (max-width: 900px) {
@@ -337,7 +338,7 @@ code { font-family: var(--mono); font-size: 0.88em; }
   .fact dd, .stat dd { font-size: 20px; }
   nav .nav-section { display: none; }
   nav { gap: 14px; }
-  .flows, .cards, .wireframes { grid-template-columns: 1fr; }
+  .flows, .cards, .wireframes, .wireframes.shots { grid-template-columns: 1fr; }
   .timeline li { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "step points" "dates dates" "goal goal"; gap: 2px 12px; }
   .data-table { font-size: 14px; }
 

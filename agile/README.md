@@ -36,15 +36,23 @@
 2. Create one page per file in `confluence/`. Insert a **Markdown** macro and paste the file, or paste the text directly and fix the tables.
 3. On the requirements index, replace the story ids with links to the JIRA issues.
 
-## Screenshots to take
+## Result
 
-Save them in `screenshots/` with these names; the report site will show them.
+The backlog was imported into JIRA Cloud on 5 November 2026 (project `VKT`, Scrum, company-managed) and the three pages were published in the Confluence space **VKT B2B Integration**. Sprint 1 is started with the goal from the sprint plan; the epics carry start and due dates from the release plan.
+
+![JIRA backlog](screenshots/01_jira_backlog.png)
 
 | File | What it shows |
 |---|---|
-| `01_jira_backlog.png` | The backlog with the six sprints and their stories |
-| `02_jira_board_sprint1.png` | The board of the active sprint 1 |
-| `03_jira_timeline.png` | The timeline with the six epics |
-| `04_jira_story_us03.png` | US-03 opened, with the Gherkin acceptance criteria |
-| `05_confluence_overview.png` | The project overview page |
-| `06_confluence_decision_log.png` | The decision log page |
+| [`01_jira_backlog.png`](screenshots/01_jira_backlog.png) | The backlog with the six sprints and their stories |
+| [`02_jira_board_sprint1.png`](screenshots/02_jira_board_sprint1.png) | The board of the active sprint 1 |
+| [`03_jira_timeline.png`](screenshots/03_jira_timeline.png) | The timeline with the six epics |
+| [`04_jira_story_us03.png`](screenshots/04_jira_story_us03.png) | US-03 opened, with the Gherkin acceptance criteria |
+| [`05_confluence_overview.png`](screenshots/05_confluence_overview.png) | The project overview page |
+| [`06_confluence_decision_log.png`](screenshots/06_confluence_decision_log.png) | The decision log page |
+
+### Lessons from the import
+
+- JIRA's new CSV importer joined the space-separated labels into one label (`b2b-integration_e1_sprint-2`); they were split again after the import. Use one `Labels` column per label next time.
+- The two spikes are of type Task, and the project's Task screen has no Story Points field, so their 2 points each did not import. JIRA therefore shows 21 points for Sprint 1 against 25 in the plan; adding the field to the screen fixes it.
+- Stories, epics, parents, priorities and sprints imported as planned: 36 issues, 141 points, sprint totals 25, 27, 28, 27, 26 and 8.
